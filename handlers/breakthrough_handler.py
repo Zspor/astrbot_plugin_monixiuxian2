@@ -1,0 +1,139 @@
+# handlers/breakthrough_handler.py
+
+from astrbot.api.event import AstrMessageEvent
+from ..data import DataBase
+from ..core import BreakthroughManager
+from ..config_manager import ConfigManager
+from ..models import Player
+from .utils import player_required
+
+CMD_BREAKTHROUGH = "突破"
+CMD_BREAKTHROUGH_INFO = "突破信息"
+
+__all__ = ["BreakthroughHandler"]
+
+
+class BreakthroughHandler:
+    """突破系统处理器"""
+
+    def __init__(self, db: DataBase, config_manager: ConfigManager, config: dict):
+        self.db = db
+        self.config_manager = config_manager
+        self.config = config
+        self.breakthrough_manager = BreakthroughManager(db, config_manager, config)
+
+    @player_required
+    async def handle_breakthrough_info(self, player: Player, event: AstrMessageEvent):
+        """查看突破信息"""
+        display_name = event.get_sender_name()
+
+        # 检查是否已经是最高境界
+        if player.level_index >= len(self.config_manager.level_data) - 1:
+            yield event.plain_result("你已经达到了最高境界，无法继续突破！")
+            return
+
+        # 获取当前和下一境界信息
+        current_level_data = self.config_manager.level_data[player.level_index]
+        next_level_data = self.config_manager.level_data[player.level_index + 1]
+
+        current_level_name = current_level_data["level_name"]
+        next_level_name = next_level_data["level_name"]
+        required_exp = next_level_data.get("exp_needed", 0)
+        base_success_rate = next_level_data.get("success_rate", 0.5)
+
+        # 检查修为是否满足
+        exp_satisfied = player.experience >= required_exp
+        exp_status = "✅ 满足" if exp_satisfied else "❌ 不足"
+
+        # 查找适用的破境丹
+        available_pills = []
+        for pill_name, pill_data in self.config_manager.pills_data.items():
+            if (pill_data.get("subtype") == "breakthrough" and
+                pill_data.get("target_level_index") == player.level_index + 1):
+                max_rate = pill_data.get("max_success_rate", 1.0)
+                breakthrough_bonus = pill_data.get("breakthrough_bonus", 0)
+                final_rate = min(base_success_rate + breakthrough_bonus, max_rate)
+                available_pills.append({
+                    "name": pill_name,
+                    "rank": pill_data.get("rank", ""),
+                    "final_rate": final_rate,
+                    "max_rate": max_rate
+                })
+
+        # 构建信息显示
+        info_lines = [
+            f"=== {display_name} 的突破信息 ===\n",
+            f"当前境界：{current_level_name}\n",
+            f"下一境界：{next_level_name}\n",
+            f"━━━━━━━━━━━━━━━\n",
+            f"【突破条件】\n",
+            f"所需修为：{required_exp}\n",
+            f"当前修为：{player.experience}\n",
+            f"修为状态：{exp_status}\n",
+            f"━━━━━━━━━━━━━━━\n",
+            f"【突破成功率】\n",
+            f"基础成功率：{base_success_rate:.1%}\n",
+        ]
+
+        if available_pills:
+            info_lines.append(f"\n【可用破境丹】\n")
+            for pill in available_pills:
+                info_lines.append(
+                    f"• {pill['name']}（{pill['rank']}）\n"
+                    f"  使用后成功率：{pill['final_rate']:.1%}（最高{pill['max_rate']:.1%}）\n"
+                )
+        else:
+            info_lines.append(f"\n暂无适用的破境丹\n")
+
+        info_lines.extend([
+            f"━━━━━━━━━━━━━━━\n",
+            f"【突破说明】\n",
+            f"• 使用命令：{CMD_BREAKTHROUGH} 或 {CMD_BREAKTHROUGH} [破境丹名称]\n",
+            f"• 突破成功：境界提升，实力大增\n",
+            f"• 突破失败：损失10%修为，有概率死亡\n",
+            f"• 死亡后：所有数据清除，需重新入仙途\n",
+            f"=" * 28
+        ])
+
+        yield event.plain_result("".join(info_lines))
+
+    @player_required
+    async def handle_breakthrough(self, player: Player, event: AstrMessageEvent, pill_name: str = None):
+        """执行突破"""
+        display_name = event.get_sender_name()
+
+        # 如果指定了破境丹，验证其有效性
+        if pill_name and pill_name.strip():
+            pill_name = pill_name.strip()
+            pill_data = self.config_manager.pills_data.get(pill_name)
+
+            if not pill_data:
+                yield event.plain_result(f"❌ 未找到破境丹：{pill_name}")
+                return
+
+            if pill_data.get("subtype") != "breakthrough":
+                yield event.plain_result(f"❌ {pill_name} 不是破境丹")
+                return
+
+            # 检查是否适用于当前突破
+            target_level = pill_data.get("target_level_index", -1)
+            if target_level != player.level_index + 1:
+                current_level = self.config_manager.level_data[player.level_index]["level_name"]
+                yield event.plain_result(
+                    f"❌ {pill_name} 不适用于当前突破\n"
+                    f"当前境界：{current_level}\n"
+                    f"此丹药用于突破到境界索引：{target_level}"
+                )
+                return
+
+            yield event.plain_result(f"使用【{pill_name}】进行突破...")
+        else:
+            pill_name = None
+            yield event.plain_result("开始尝试突破...")
+
+        # 执行突破
+        success, message, died = await self.breakthrough_manager.execute_breakthrough(
+            player, pill_name
+        )
+
+        yield event.plain_result(message)

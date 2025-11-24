@@ -1,180 +1,143 @@
 # models.py
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, List, Optional
 import json
-from dataclasses import dataclass, field, replace, asdict
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .config_manager import ConfigManager
 
 @dataclass
 class Item:
-    """物品数据模型"""
+    """装备物品模型"""
 
-    id: str
-    name: str
-    type: str
-    rank: str
-    description: str
-    price: int
-    effect: Optional[Dict[str, Any]] = None
-    subtype: Optional[str] = None  # 装备子类型，如'武器', '防具'
-    equip_effects: Optional[Dict[str, Any]] = None  # 装备属性加成
+    item_id: str  # 物品唯一ID
+    name: str  # 物品名称
+    item_type: str  # 装备类型：weapon（武器）、armor（防具）、main_technique（主修心法）、technique（功法）
+    description: str = ""  # 物品描述
 
-@dataclass
-class FloorEvent:
-    """秘境层级事件数据模型"""
+    # 装备品级相关
+    rank: str = ""  # 品级：凡品、灵品、地品、天品、皇品、帝品、道品、仙品、混元先天
+    required_level_index: int = 0  # 需要的最低境界level_index
+    weapon_category: str = ""  # 武器类别：剑、刀、阔刀、琴、匕首、符箓、鼎、棍、枪、笔
 
-    type: str
-    data: Dict[str, Any] = field(default_factory=dict)
+    # 装备属性加成
+    magic_damage: int = 0  # 法伤加成
+    physical_damage: int = 0  # 物伤加成
+    magic_defense: int = 0  # 法防加成
+    physical_defense: int = 0  # 物防加成
+    mental_power: int = 0  # 精神力加成
 
-@dataclass
-class RealmInstance:
-    """秘境实例数据模型"""
+    # 心法专属属性
+    exp_multiplier: float = 0.0  # 修为倍率加成（仅心法有效）
+    spiritual_qi: int = 0  # 灵气加成（仅心法有效）
 
-    id: str
-    total_floors: int
-    floors: List[FloorEvent]
+    def get_attribute_display(self) -> str:
+        """获取属性加成的显示文本"""
+        attrs = []
+        if self.magic_damage > 0:
+            attrs.append(f"法伤+{self.magic_damage}")
+        if self.physical_damage > 0:
+            attrs.append(f"物伤+{self.physical_damage}")
+        if self.magic_defense > 0:
+            attrs.append(f"法防+{self.magic_defense}")
+        if self.physical_defense > 0:
+            attrs.append(f"物防+{self.physical_defense}")
+        if self.mental_power > 0:
+            attrs.append(f"精神力+{self.mental_power}")
+        if self.exp_multiplier > 0:
+            attrs.append(f"修为倍率+{self.exp_multiplier:.1%}")
+        if self.spiritual_qi > 0:
+            attrs.append(f"灵气+{self.spiritual_qi}")
+        return "、".join(attrs) if attrs else "无属性加成"
 
 @dataclass
 class Player:
-    """玩家数据模型"""
+    """玩家数据模型 - 新属性系统（灵修/体修）+ 装备系统"""
 
     user_id: str
     level_index: int = 0
     spiritual_root: str = "未知"
-    experience: int = 0
-    gold: int = 0
-    last_check_in: float = 0.0
+    cultivation_type: str = "灵修"  # 灵修或体修
+
+    # 基础属性
+    lifespan: int = 100  # 寿命
+    experience: int = 0  # 修为
+    gold: int = 0  # 灵石
     state: str = "空闲"
-    state_start_time: float = 0.0
-    sect_id: Optional[int] = None
-    sect_name: Optional[str] = None
-    hp: int = 100
-    max_hp: int = 100
-    attack: int = 10
-    defense: int = 5
-    spiritual_power: int = 50  # 灵力
-    mental_power: int = 50  # 精神力
-    realm_id: Optional[str] = None
-    realm_floor: int = 0
-    realm_data: Optional[str] = None
-    
-    # 装备槽位
-    equipped_weapon: Optional[str] = None
-    equipped_armor: Optional[str] = None
-    equipped_accessory: Optional[str] = None
-    
-    # 道号
-    dao_name: Optional[str] = None
-    
-    # 突破成功率加成（临时buff）
-    breakthrough_bonus: float = 0.0
+    cultivation_start_time: int = 0  # 闭关开始时间（Unix时间戳，0表示未闭关）
+    last_check_in_date: str = ""  # 最后签到日期（格式：YYYY-MM-DD，空字符串表示从未签到）
+
+    # 装备栏
+    weapon: str = ""  # 武器
+    armor: str = ""  # 防具
+    main_technique: str = ""  # 主修心法
+    techniques: str = "[]"  # 功法列表（JSON字符串，最多3个）
+
+    # 新的战斗属性
+    spiritual_qi: int = 100  # 当前灵气
+    max_spiritual_qi: int = 1000  # 最大灵气容量
+    magic_damage: int = 10  # 法伤
+    physical_damage: int = 10  # 物伤
+    magic_defense: int = 5  # 法防
+    physical_defense: int = 5  # 物防
+    mental_power: int = 100  # 精神力
 
     def get_level(self, config_manager: "ConfigManager") -> str:
+        """获取境界名称"""
         if 0 <= self.level_index < len(config_manager.level_data):
             return config_manager.level_data[self.level_index]["level_name"]
         return "未知境界"
 
-    def get_combat_stats(self, config_manager: "ConfigManager") -> Dict[str, Any]:
-        """计算并返回玩家的最终战斗属性（基础属性+装备加成）"""
-        stats = {
-            "hp": self.hp,
-            "max_hp": self.max_hp,
-            "attack": self.attack,
-            "defense": self.defense,
-            "spiritual_power": self.spiritual_power,
-            "mental_power": self.mental_power,
-        }
-        
-        equipment_ids = [self.equipped_weapon, self.equipped_armor, self.equipped_accessory]
-        
-        for item_id in equipment_ids:
-            if item_id:
-                item = config_manager.item_data.get(str(item_id))
-                if item and item.equip_effects:
-                    for key, value in item.equip_effects.items():
-                        if key in stats:
-                            stats[key] += value
-        return stats
+    def get_required_exp(self, config_manager: "ConfigManager") -> int:
+        """获取突破到下一境界所需的总修为"""
+        if self.level_index + 1 < len(config_manager.level_data):
+            return config_manager.level_data[self.level_index + 1].get("exp_needed", 0)
+        return 0
 
-    def get_realm_instance(self) -> Optional[RealmInstance]:
-        if not self.realm_data:
-            return None
+    def get_techniques_list(self) -> List[str]:
+        """获取功法列表"""
         try:
-            data = json.loads(self.realm_data)
-            floors = [FloorEvent(**f) for f in data.get("floors", [])]
-            data["floors"] = floors
-            return RealmInstance(**data)
-        except (json.JSONDecodeError, TypeError):
-            return None
+            return json.loads(self.techniques)
+        except:
+            return []
 
-    def set_realm_instance(self, instance: Optional[RealmInstance]):
-        if instance is None:
-            self.realm_data = None
-        else:
-            self.realm_data = json.dumps(asdict(instance))
+    def set_techniques_list(self, techniques_list: List[str]):
+        """设置功法列表"""
+        self.techniques = json.dumps(techniques_list, ensure_ascii=False)
 
-    def clone(self) -> "Player":
-        return replace(self)
+    def get_total_attributes(self, equipped_items: List[Item]) -> dict:
+        """计算包含装备加成的总属性
 
-@dataclass
-class PlayerEffect:
-    experience: int = 0
-    gold: int = 0
-    hp: int = 0
-    max_hp: int = 0
-    spiritual_power: int = 0
-    mental_power: int = 0
-    attack: int = 0
-    defense: int = 0
+        Args:
+            equipped_items: 已装备的物品列表
 
-@dataclass
-class Boss:
-    """世界Boss数据模型"""
+        Returns:
+            包含所有属性的字典
+        """
+        # 基础属性
+        total = {
+            "spiritual_qi": self.spiritual_qi,
+            "max_spiritual_qi": self.max_spiritual_qi,
+            "magic_damage": self.magic_damage,
+            "physical_damage": self.physical_damage,
+            "magic_defense": self.magic_defense,
+            "physical_defense": self.physical_defense,
+            "mental_power": self.mental_power,
+            "exp_multiplier": 0.0,  # 基础修为倍率为0，只来自心法
+        }
 
-    id: str
-    name: str
-    hp: int
-    max_hp: int
-    attack: int
-    defense: int
-    cooldown_minutes: int
-    rewards: dict
+        # 叠加装备属性
+        for item in equipped_items:
+            total["magic_damage"] += item.magic_damage
+            total["physical_damage"] += item.physical_damage
+            total["magic_defense"] += item.magic_defense
+            total["physical_defense"] += item.physical_defense
+            total["mental_power"] += item.mental_power
 
-@dataclass
-class ActiveWorldBoss:
-    """当前活跃的世界Boss数据模型"""
+            # 心法专属属性
+            if item.item_type == "main_technique":
+                total["exp_multiplier"] += item.exp_multiplier
+                total["max_spiritual_qi"] += item.spiritual_qi
 
-    boss_id: str
-    current_hp: int
-    max_hp: int
-    spawned_at: float
-    level_index: int
-
-    def get_level_name(self, config_manager: "ConfigManager") -> str:
-        """根据level_index获取Boss的境界名称"""
-        if 0 <= self.level_index < len(config_manager.level_data):
-            return config_manager.level_data[self.level_index]["level_name"]
-        return "未知境界"
-
-@dataclass
-class Monster:
-    """怪物数据模型"""
-
-    id: str
-    name: str
-    hp: int
-    max_hp: int
-    attack: int
-    defense: int
-    rewards: dict
-
-@dataclass
-class AttackResult:
-    """战斗结果数据模型"""
-
-    success: bool
-    message: str
-    battle_over: bool = False
-    updated_players: List[Player] = field(default_factory=list)
+        return total

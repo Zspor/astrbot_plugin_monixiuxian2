@@ -21,112 +21,29 @@
         "default": 100,
         "hint": "新玩家创建角色时获得的初始灵石数量。"
       },
-      "CHECK_IN_REWARD_MIN": {
-        "description": "签到最小奖励",
+      "BASE_EXP_PER_MINUTE": {
+        "description": "闭关基础修为（每分钟）",
+        "type": "int",
+        "default": 100,
+        "hint": "闭关修炼时，每分钟获得的基础修为值（会受灵根倍率影响）。"
+      },
+      "CHECK_IN_GOLD_MIN": {
+        "description": "签到灵石奖励（最小值）",
         "type": "int",
         "default": 50,
-        "hint": "每日签到可获得的最小灵石数量。"
+        "hint": "每日签到获得的最少灵石数量。"
       },
-      "CHECK_IN_REWARD_MAX": {
-        "description": "签到最大奖励",
+      "CHECK_IN_GOLD_MAX": {
+        "description": "签到灵石奖励（最大值）",
         "type": "int",
-        "default": 200,
-        "hint": "每日签到可获得的最大灵石数量。"
+        "default": 500,
+        "hint": "每日签到获得的最多灵石数量。"
       },
-      "BASE_EXP_PER_MINUTE": {
-        "description": "每分钟闭关修为",
-        "type": "int",
-        "default": 10,
-        "hint": "玩家在 “闭关” 状态下，每分钟获得的基础修为值。"
-      },
-      "CULTIVATION_HP_RECOVERY_RATIO": {
-        "description": "闭关回血比例",
-        "type": "float",
-        "default": 0.1,
-        "hint": "闭关结束时，恢复的气血值 = 获得的修为 * 此比例。例如0.1代表恢复修为10%的血量。"
-      },
-      "REROLL_SPIRIT_ROOT_COST": {
-        "description": "重置灵根花费",
-        "type": "int",
-        "default": 10000,
-        "hint": "执行\"重入仙途\"指令，重新随机灵根需要消耗的灵石数量。"
-      },
-      "BREAKTHROUGH_FAIL_PUNISHMENT_RATIO": {
-        "description": "突破失败惩罚率",
-        "type": "float",
-        "default": 0.1,
-        "hint": "突破失败时，损失的修为占晋升所需修为的比例（0.1 = 10%）。"
-      },
-      "CREATE_SECT_COST": {
-        "description": "创建宗门花费",
-        "type": "int",
-        "default": 5000,
-        "hint": "创建宗门需要消耗的灵石数量。"
-      },
-      "WORLD_BOSS_TOP_PLAYERS_AVG": {
-        "description": "世界Boss等级参考人数",
-        "type": "int",
-        "default": 5,
-        "hint": "生成世界Boss时，参考服务器战力排名前N的玩家的平均等级。"
-      },
-      "SHOP_DAILY_ITEM_COUNT": {
-        "description": "每日商店商品数量",
-        "type": "int",
-        "default": 8,
-        "hint": "每日坊市随机上架的商品种类数量。"
-      },
-      "BANK_FIXED_MIN_HOURS": {
-        "description": "定期存款最低时长(小时)",
-        "type": "int",
-        "default": 24,
-        "hint": "定期存款最少需要存多少小时，默认24小时(1天)。"
-      },
-      "BANK_FIXED_RATE_PER_HOUR": {
-        "description": "定期存款每小时利率",
-        "type": "float",
-        "default": 1.003,
-        "hint": "定期存款每小时的利率倍数，默认1.003表示每小时增长0.3%。计算公式：本金 * (利率 ^ 小时数)"
-      },
-      "BANK_CURRENT_RATE_PER_HOUR": {
-        "description": "活期存款每小时利率",
-        "type": "float",
-        "default": 1.001,
-        "hint": "活期存款每小时的利率倍数，默认1.001表示每小时增长0.1%。计算公式：本金 * (利率 ^ 小时数)"
-      },
-      "BANK_CURRENT_MIN_HOURS": {
-        "description": "活期存款最低时长(小时)",
-        "type": "int",
-        "default": 1,
-        "hint": "活期存款最少需要存多少小时才能取出，默认1小时。"
-      }
-    }
-  },
-  "REALM_RULES": {
-    "description": "秘境生成规则",
-    "type": "object",
-    "items": {
-      "REALM_BASE_FLOORS": {
-        "description": "秘境基础层数",
-        "type": "int",
-        "default": 3
-      },
-      "REALM_FLOORS_PER_LEVEL_DIVISOR": {
-        "description": "境界等级影响层数的除数",
-        "type": "int",
-        "default": 2,
-        "hint": "每 N 个境界等级，秘境增加1层。例如，值为2时，每2级增加1层。"
-      },
-      "REALM_MONSTER_CHANCE": {
-        "description": "秘境遇怪概率",
-        "type": "float",
-        "default": 0.7,
-        "hint": "在秘境中遇到怪物事件的概率（0.0到1.0之间）。"
-      },
-      "REALM_BOSS_SCALING_FACTOR": {
-        "description": "秘境Boss强度系数",
-        "type": "float",
-        "default": 0.7,
-        "hint": "秘境最终Boss的强度缩放系数（例如0.7代表70%强度）。"
+      "BREAKTHROUGH_DEATH_PROBABILITY": {
+        "description": "突破失败死亡概率范围",
+        "type": "list",
+        "default": [0.01, 0.1],
+        "hint": "突破失败时的死亡概率范围。第一个值为最小概率（1%），第二个值为最大概率（10%）。每次突破失败会在此范围内随机一个死亡概率。"
       }
     }
   },
@@ -305,7 +222,7 @@
       "DATABASE_FILE": {
         "description": "数据库文件名",
         "type": "string",
-        "default": "xiuxian_data.db",
+        "default": "xiuxian_data_lite.db",
         "hint": "存储玩家数据的SQLite数据库文件名。"
       }
     }

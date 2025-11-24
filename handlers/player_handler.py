@@ -1,4 +1,7 @@
 # handlers/player_handler.py
+import time
+import random
+from datetime import datetime
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import AstrBotConfig
 from ..data import DataBase
@@ -9,182 +12,260 @@ from .utils import player_required
 
 CMD_START_XIUXIAN = "我要修仙"
 CMD_PLAYER_INFO = "我的信息"
+CMD_START_CULTIVATION = "闭关"
+CMD_END_CULTIVATION = "出关"
 CMD_CHECK_IN = "签到"
 
 __all__ = ["PlayerHandler"]
 
 class PlayerHandler:
-    # 玩家相关指令处理器
-    
+    """玩家基础信息处理器 - 支持灵修/体修选择"""
+
     def __init__(self, db: DataBase, config: AstrBotConfig, config_manager: ConfigManager):
         self.db = db
         self.config = config
         self.config_manager = config_manager
         self.cultivation_manager = CultivationManager(config, config_manager)
 
-    async def handle_start_xiuxian(self, event: AstrMessageEvent):
+    async def handle_start_xiuxian(self, event: AstrMessageEvent, cultivation_type: str = ""):
+        """处理创建角色
+
+        Args:
+            cultivation_type: 修炼类型，"灵修"或"体修"，为空则显示选择提示
+        """
         user_id = event.get_sender_id()
+
+        # 检查是否已创建角色
         if await self.db.get_player_by_id(user_id):
             yield event.plain_result("道友，你已踏入仙途，无需重复此举。")
             return
 
-        new_player = self.cultivation_manager.generate_new_player_stats(user_id)
+        # 如果没有提供职业选择，显示选择提示
+        if not cultivation_type or cultivation_type.strip() == "":
+            help_msg = (
+                "🌟 欢迎踏入修仙之路！\n"
+                "━━━━━━━━━━━━━━━\n"
+                "请选择你的修炼方式：\n\n"
+                "【灵修】\n"
+                "• 寿命：100\n"
+                "• 灵气：100-1000\n"
+                "• 法伤：5-100\n"
+                "• 物伤：5\n"
+                "• 法防：0\n"
+                "• 物防：5\n"
+                "• 精神力：100-500\n\n"
+                "【体修】\n"
+                "• 寿命：50-100\n"
+                "• 灵气：0\n"
+                "• 法伤：0\n"
+                "• 物伤：100-500\n"
+                "• 法防：50-200\n"
+                "• 物防：100-500\n"
+                "• 精神力：100-500\n"
+                "━━━━━━━━━━━━━━━\n"
+                "⚠️ 修仙风险警告 ⚠️\n"
+                "• 突破失败有概率走火入魔身死道消\n"
+                "• 生命值归零也会导致死亡\n"
+                "• 死亡后所有数据清除，需重新入仙途\n"
+                "━━━━━━━━━━━━━━━\n"
+                f"💡 使用方法：\n"
+                f"  {CMD_START_XIUXIAN} 灵修\n"
+                f"  {CMD_START_XIUXIAN} 体修"
+            )
+            yield event.plain_result(help_msg)
+            return
+
+        # 验证职业类型
+        cultivation_type = cultivation_type.strip()
+        if cultivation_type not in ["灵修", "体修"]:
+            yield event.plain_result(f"职业选择错误！请选择「灵修」或「体修」。")
+            return
+
+        # 生成新玩家
+        new_player = self.cultivation_manager.generate_new_player_stats(user_id, cultivation_type)
         await self.db.create_player(new_player)
-        
+
         # 获取灵根描述
         root_name = new_player.spiritual_root.replace("灵根", "")
         root_description = self.cultivation_manager._get_root_description(root_name)
-        
+
         reply_msg = (
             f"🎉 恭喜道友 {event.get_sender_name()} 踏上仙途！\n"
             f"━━━━━━━━━━━━━━━\n"
+            f"修炼方式：【{new_player.cultivation_type}】\n"
             f"灵根：【{new_player.spiritual_root}】\n"
             f"评价：{root_description}\n"
             f"启动资金：{new_player.gold} 灵石\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💡 发送「{CMD_PLAYER_INFO}」查看状态\n"
-            f"💰 发送「{CMD_CHECK_IN}」领取福利！"
+            f"⚠️ 修仙有风险，突破需谨慎！\n"
+            f"突破失败或生命值归零会导致\n"
+            f"身死道消，所有数据清除！\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💡 发送「{CMD_PLAYER_INFO}」查看状态"
         )
         yield event.plain_result(reply_msg)
 
     @player_required
     async def handle_player_info(self, player: Player, event: AstrMessageEvent):
-        # 优先显示道号，没有则显示QQ名称
-        display_name = player.dao_name if player.dao_name else event.get_sender_name()
-        
-        sect_info = f"宗门：{player.sect_name if player.sect_name else '逍遥散人'}"
-        combat_stats = player.get_combat_stats(self.config_manager)
+        """处理查看玩家信息 - 展示新属性"""
+        display_name = event.get_sender_name()
+        required_exp = player.get_required_exp(self.config_manager)
 
-        # 构建装备显示部分
-        equipped_items_lines = []
-        slot_map = {"武器": player.equipped_weapon, "防具": player.equipped_armor, "饰品": player.equipped_accessory}
-        for slot, item_id in slot_map.items():
-            item_name = "(无)"
-            if item_id:
-                item_data = self.config_manager.item_data.get(str(item_id))
-                if item_data:
-                    item_name = f"「{item_data.name}」"
-            equipped_items_lines.append(f"  {slot}: {item_name}")
+        # 获取装备加成后的灵气容量
+        from ..core import EquipmentManager
+        equipment_manager = EquipmentManager(self.db)
+        equipped_items = equipment_manager.get_equipped_items(
+            player,
+            self.config_manager.items_data,
+            self.config_manager.weapons_data
+        )
+        total_attrs = player.get_total_attributes(equipped_items)
 
-        equipped_info = "\n".join(equipped_items_lines)
-
-        # 突破buff显示
-        breakthrough_buff_msg = ""
-        if player.breakthrough_bonus > 0:
-            bonus_percent = int(player.breakthrough_bonus * 100)
-            breakthrough_buff_msg = f"💫 突破加成: +{bonus_percent}%\n"
-        
         reply_msg = (
             f"--- 道友 {display_name} 的信息 ---\n"
+            f"修炼方式：{player.cultivation_type}\n"
             f"境界：{player.get_level(self.config_manager)}\n"
             f"灵根：{player.spiritual_root}\n"
-            f"修为：{player.experience}\n"
+            f"修为：{player.experience}/{required_exp}\n"
             f"灵石：{player.gold}\n"
-            f"{sect_info}\n"
             f"状态：{player.state}\n"
-            f"{breakthrough_buff_msg}"
-            "--- 战斗属性 (含装备加成) ---\n"
-            f"🩸 气血: {combat_stats['hp']}/{combat_stats['max_hp']}\n"
-            f"⚔️ 攻击: {combat_stats['attack']}\n"
-            f"🛡️ 防御: {combat_stats['defense']}\n"
-            f"✨ 灵力: {combat_stats['spiritual_power']}\n"
-            f"🧠 精神力: {combat_stats['mental_power']}\n"
-            "--- 穿戴装备 ---\n"
-            f"{equipped_info}\n"
+            "--- 基础属性 ---\n"
+            f"⏳ 寿命: {player.lifespan}\n"
+            f"🧠 精神力: {total_attrs['mental_power']}\n"
+            "--- 战斗属性 ---\n"
+            f"✨ 灵气: {player.spiritual_qi}/{total_attrs['max_spiritual_qi']}\n"
+            f"⚔️ 法伤: {total_attrs['magic_damage']}\n"
+            f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
+            f"🛡️ 法防: {total_attrs['magic_defense']}\n"
+            f"🪨 物防: {total_attrs['physical_defense']}\n"
             f"--------------------------"
         )
         yield event.plain_result(reply_msg)
 
     @player_required
-    async def handle_check_in(self, player: Player, event: AstrMessageEvent):
-        success, msg, updated_player = self.cultivation_manager.handle_check_in(player)
-        if success and updated_player:
-            await self.db.update_player(updated_player)
-        yield event.plain_result(msg)
-
-    @player_required
     async def handle_start_cultivation(self, player: Player, event: AstrMessageEvent):
-        success, msg, updated_player = self.cultivation_manager.handle_start_cultivation(player)
-        if success and updated_player:
-            await self.db.update_player(updated_player)
-        yield event.plain_result(msg)
+        """处理闭关指令"""
+        # 检查是否已经在闭关
+        if player.state == "修炼中":
+            yield event.plain_result("道友已在闭关中，请勿重复进入。")
+            return
+
+        # 记录闭关开始时间
+        player.state = "修炼中"
+        player.cultivation_start_time = int(time.time())
+        await self.db.update_player(player)
+
+        yield event.plain_result(
+            "🧘 道友已进入闭关状态\n"
+            "━━━━━━━━━━━━━━━\n"
+            "闭关期间，你将与世隔绝，潜心修炼。\n"
+            f"💡 发送「{CMD_END_CULTIVATION}」结束闭关\n"
+            "⏱️ 每分钟将获得修为，受灵根资质影响。"
+        )
 
     @player_required
     async def handle_end_cultivation(self, player: Player, event: AstrMessageEvent):
-        success, msg, updated_player = self.cultivation_manager.handle_end_cultivation(player)
-        if success and updated_player:
-            await self.db.update_player(updated_player)
-        yield event.plain_result(msg)
+        """处理出关指令"""
+        # 检查是否在闭关中
+        if player.state != "修炼中":
+            yield event.plain_result("道友当前并未闭关，无需出关。")
+            return
 
-    @player_required
-    async def handle_breakthrough(self, player: Player, event: AstrMessageEvent):
-        # 内部已经包含了状态检查，但为了统一，装饰器的检查是第一道防线
-        success, msg, updated_player = self.cultivation_manager.handle_breakthrough(player)
-        if success and updated_player:
-            await self.db.update_player(updated_player)
-        yield event.plain_result(msg)
-        
-    @player_required
-    async def handle_reroll_spirit_root(self, player: Player, event: AstrMessageEvent):
-        success, msg, updated_player = self.cultivation_manager.handle_reroll_spirit_root(player)
-        if success and updated_player:
-            await self.db.update_player(updated_player)
-        yield event.plain_result(msg)
+        # 检查是否有闭关开始时间
+        if player.cultivation_start_time == 0:
+            yield event.plain_result("数据异常：未记录闭关开始时间。")
+            return
 
-    @player_required
-    async def handle_set_dao_name(self, player: Player, event: AstrMessageEvent, dao_name: str):
-        """设置道号"""
-        # 检查是否提供了道号参数
-        if not dao_name or not dao_name.strip():
-            current_dao = player.dao_name if player.dao_name else "未设置"
-            msg = [
-                "📜 道号设置指南",
-                "━━━━━━━━━━━━━━━",
-                f"当前道号：{current_dao}",
-                "",
-                "🔹 使用方法：",
-                "  道号 <你的道号>",
-                "",
-                "🔹 示例：",
-                "  道号 青云子",
-                "  道号 紫霄真人",
-                "",
-                "🔹 规则：",
-                "  • 长度：2-20个字",
-                "  • 道号全服唯一，不可重复",
-                "  • 设置后将在各处优先显示",
-                "━━━━━━━━━━━━━━━"
-            ]
-            yield event.plain_result("\n".join(msg))
+        # 计算闭关时长（分钟）
+        end_time = int(time.time())
+        duration_seconds = end_time - player.cultivation_start_time
+        duration_minutes = duration_seconds // 60
+
+        if duration_minutes < 1:
+            yield event.plain_result("道友闭关时间不足1分钟，未获得修为。请继续闭关修炼。")
             return
-        
-        # 验证道号长度
-        if len(dao_name) > 20:
-            yield event.plain_result("道号过长！请设置20字以内的道号。")
-            return
-        
-        if len(dao_name) < 2:
-            yield event.plain_result("道号过短！请设置至少2个字的道号。")
-            return
-        
-        dao_name_clean = dao_name.strip()
-        
-        # 检查道号是否已被占用（排除自己）
-        is_taken = await self.db.is_dao_name_taken(dao_name_clean, player.user_id)
-        if is_taken:
-            yield event.plain_result(f"道号「{dao_name_clean}」已被其他道友占用，请另择道号。")
-            return
-        
-        old_dao_name = player.dao_name if player.dao_name else "未设置"
-        player.dao_name = dao_name_clean
+
+        # 获取主修心法的修为加成
+        technique_bonus = 0.0
+        if player.main_technique:
+            from ..core import EquipmentManager
+            equipment_manager = EquipmentManager(self.db)
+            equipped_items = equipment_manager.get_equipped_items(
+                player,
+                self.config_manager.items_data,
+                self.config_manager.weapons_data
+            )
+            # 找到主修心法
+            for item in equipped_items:
+                if item.item_type == "main_technique":
+                    technique_bonus = item.exp_multiplier
+                    break
+
+        # 计算获得的修为
+        gained_exp = self.cultivation_manager.calculate_cultivation_exp(player, duration_minutes, technique_bonus)
+
+        # 更新玩家数据
+        player.experience += gained_exp
+        player.state = "空闲"
+        player.cultivation_start_time = 0
         await self.db.update_player(player)
-        
-        msg = [
-            "✅ 道号设置成功！",
-            "━━━━━━━━━━━━━━━",
-            f"原道号：{old_dao_name}",
-            f"新道号：{player.dao_name}",
-            "━━━━━━━━━━━━━━━",
-            "今后在各处将优先显示你的道号。"
-        ]
-        yield event.plain_result("\n".join(msg))
+
+        # 计算闭关时长显示
+        hours = duration_minutes // 60
+        minutes = duration_minutes % 60
+        time_str = ""
+        if hours > 0:
+            time_str += f"{hours}小时"
+        if minutes > 0:
+            time_str += f"{minutes}分钟"
+
+        reply_msg = (
+            "🌟 道友出关成功！\n"
+            "━━━━━━━━━━━━━━━\n"
+            f"⏱️ 闭关时长：{time_str}\n"
+            f"📈 获得修为：{gained_exp}\n"
+            f"💫 当前修为：{player.experience}\n"
+            "━━━━━━━━━━━━━━━\n"
+            "道友已回归红尘，可继续修行。"
+        )
+        yield event.plain_result(reply_msg)
+
+    @player_required
+    async def handle_check_in(self, player: Player, event: AstrMessageEvent):
+        """处理签到指令"""
+        # 获取今天的日期（格式：YYYY-MM-DD）
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # 检查是否已经签到过
+        if player.last_check_in_date == today:
+            yield event.plain_result(
+                "📅 道友今日已经签到过了\n"
+                "请明日再来。"
+            )
+            return
+
+        # 获取签到奖励范围配置
+        check_in_gold_min = self.config["VALUES"].get("CHECK_IN_GOLD_MIN", 50)
+        check_in_gold_max = self.config["VALUES"].get("CHECK_IN_GOLD_MAX", 500)
+
+        # 确保最小值不大于最大值
+        if check_in_gold_min > check_in_gold_max:
+            check_in_gold_min, check_in_gold_max = check_in_gold_max, check_in_gold_min
+
+        # 生成随机奖励
+        check_in_gold = random.randint(check_in_gold_min, check_in_gold_max)
+
+        # 更新玩家数据
+        player.gold += check_in_gold
+        player.last_check_in_date = today
+        await self.db.update_player(player)
+
+        reply_msg = (
+            "✅ 签到成功！\n"
+            "━━━━━━━━━━━━━━━\n"
+            f"💰 获得灵石：{check_in_gold}\n"
+            f"💎 当前灵石：{player.gold}\n"
+            "━━━━━━━━━━━━━━━\n"
+            "明日再来，莫要忘记哦~"
+        )
+        yield event.plain_result(reply_msg)
