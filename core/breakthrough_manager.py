@@ -130,30 +130,24 @@ class BreakthroughManager:
             old_level_index = player.level_index
             player.level_index = next_level_index
 
-            # 根据新旧境界的差值累加属性，避免覆盖原有数值
-            current_level_data = self.config_manager.level_data[old_level_index]
-            current_base_attack = current_level_data.get("base_attack", player.magic_damage)
-            next_base_attack = next_level_data.get("base_attack", current_base_attack)
-            attack_increase = max(0, next_base_attack - current_base_attack)
+            # 直接从下一境界配置中读取突破增量，并累加到玩家属性上
+            # 这样可以保留玩家初始化时的随机属性值
+            lifespan_gain = next_level_data.get("breakthrough_lifespan_gain", 0)
+            spiritual_qi_gain = next_level_data.get("breakthrough_spiritual_qi_gain", 0)
+            mental_power_gain = next_level_data.get("breakthrough_mental_power_gain", 0)
+            physical_damage_gain = next_level_data.get("breakthrough_physical_damage_gain", 0)
+            magic_damage_gain = next_level_data.get("breakthrough_magic_damage_gain", 0)
+            physical_defense_gain = next_level_data.get("breakthrough_physical_defense_gain", 0)
+            magic_defense_gain = next_level_data.get("breakthrough_magic_defense_gain", 0)
 
-            current_base_defense = current_level_data.get("base_defense", player.magic_defense)
-            next_base_defense = next_level_data.get("base_defense", current_base_defense)
-            defense_increase = max(0, next_base_defense - current_base_defense)
-
-            current_base_spiritual = current_level_data.get("base_spiritual_power", player.max_spiritual_qi)
-            next_base_spiritual = next_level_data.get("base_spiritual_power", current_base_spiritual)
-            spiritual_increase = max(0, next_base_spiritual - current_base_spiritual)
-
-            current_base_mental = current_level_data.get("base_mental_power", player.mental_power)
-            next_base_mental = next_level_data.get("base_mental_power", current_base_mental)
-            mental_increase = max(0, next_base_mental - current_base_mental)
-
-            player.magic_damage += attack_increase
-            player.physical_damage += attack_increase
-            player.magic_defense += defense_increase
-            player.physical_defense += defense_increase
-            player.max_spiritual_qi += spiritual_increase
-            player.mental_power += mental_increase
+            # 应用属性增长
+            player.lifespan += lifespan_gain
+            player.physical_damage += physical_damage_gain
+            player.magic_damage += magic_damage_gain
+            player.physical_defense += physical_defense_gain
+            player.magic_defense += magic_defense_gain
+            player.max_spiritual_qi += spiritual_qi_gain
+            player.mental_power += mental_power_gain
 
             # 恢复满灵气
             player.spiritual_qi = player.max_spiritual_qi
@@ -168,7 +162,17 @@ class BreakthroughManager:
                 f"━━━━━━━━━━━━━━━\n"
                 f"恭喜你从【{current_level_name}】突破至【{next_level_name}】！\n"
                 f"境界提升，实力大增！\n"
-                f"气血上限：{player.max_spiritual_qi}\n"
+                f"\n【属性增长】\n"
+                f"寿命 +{lifespan_gain}\n"
+                f"最大灵气 +{spiritual_qi_gain}\n"
+                f"法伤 +{magic_damage_gain}\n"
+                f"物伤 +{physical_damage_gain}\n"
+                f"法防 +{magic_defense_gain}\n"
+                f"物防 +{physical_defense_gain}\n"
+                f"精神力 +{mental_power_gain}\n"
+                f"\n【当前属性】\n"
+                f"寿命：{player.lifespan}\n"
+                f"最大灵气：{player.max_spiritual_qi}\n"
                 f"法伤：{player.magic_damage}\n"
                 f"物伤：{player.physical_damage}\n"
                 f"法防：{player.magic_defense}\n"
