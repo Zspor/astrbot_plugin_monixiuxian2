@@ -1,11 +1,11 @@
-# data/data_manager.py - 简化版
+# data/data_manager.py
 
 import aiosqlite
 from pathlib import Path
 from ..models import Player
 
 class DataBase:
-    """数据库管理类 - 简化版，只保留基础玩家操作"""
+    """数据库管理类，提供基础玩家操作"""
 
     def __init__(self, db_file: str = "xiuxian_data_lite.db"):
         self.db_path = Path(db_file)

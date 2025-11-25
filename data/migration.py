@@ -1,4 +1,4 @@
-# data/migration.py - 简化版
+# data/migration.py
 
 import aiosqlite
 from typing import Dict, Callable, Awaitable
@@ -17,7 +17,7 @@ def migration(version: int):
     return decorator
 
 class MigrationManager:
-    """数据库迁移管理器 - 简化版"""
+    """数据库迁移管理器"""
 
     def __init__(self, conn: aiosqlite.Connection, config_manager: ConfigManager):
         self.conn = conn
@@ -62,7 +62,7 @@ class MigrationManager:
             logger.info("数据库已是最新版本，无需升级。")
 
 async def _create_all_tables_v1(conn: aiosqlite.Connection):
-    """创建所有表 - 简化版v1，只保留玩家基础信息"""
+    """创建所有表 - v1，只保留玩家基础信息"""
 
     # 数据库版本信息表
     await conn.execute("""
@@ -71,7 +71,7 @@ async def _create_all_tables_v1(conn: aiosqlite.Connection):
         )
     """)
 
-    # 玩家表 - 简化版，只保留基础属性
+    # 玩家表 - 只保留基础属性
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS players (
             user_id TEXT PRIMARY KEY,
@@ -92,7 +92,7 @@ async def _create_all_tables_v1(conn: aiosqlite.Connection):
     # 创建索引
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_player_level ON players(level_index)")
 
-    logger.info("数据库表已创建完成（简化版v1）")
+    logger.info("数据库表已创建完成（v1）")
 
 @migration(2)
 async def _migrate_to_v2(conn: aiosqlite.Connection, config_manager: ConfigManager):

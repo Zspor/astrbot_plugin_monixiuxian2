@@ -1,4 +1,4 @@
-# config_manager.py - 简化版
+# config_manager.py
 
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ from typing import List, Dict
 from astrbot.api import logger
 
 class ConfigManager:
-    """配置管理器 - 简化版，加载境界、物品、武器和丹药配置"""
+    """配置管理器，加载境界、物品、武器和丹药配置"""
 
     def __init__(self, base_dir: Path):
         self._base_dir = base_dir

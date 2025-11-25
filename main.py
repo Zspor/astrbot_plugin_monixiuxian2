@@ -22,12 +22,12 @@ CMD_BREAKTHROUGH_INFO = "突破信息"
 @register(
     "astrbot_plugin_xiuxian_lite",
     "linjianyan0229",
-    "基于astrbot框架的文字修仙游戏（简化版）",
-    "v2.4.1-lite",
+    "基于astrbot框架的文字修仙游戏",
+    "1.0.0dev",
     "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
-    """修仙插件 - 简化版，只保留基础功能"""
+    """修仙插件 - 文字修仙游戏"""
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -47,7 +47,7 @@ class XiuXianPlugin(Star):
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
 
-        logger.info("【修仙插件-简化版】XiuXianPlugin 初始化完成。")
+        logger.info("【修仙插件】XiuXianPlugin 初始化完成。")
 
     def _check_access(self, event: AstrMessageEvent) -> bool:
         """检查访问权限，支持群聊白名单控制"""
@@ -80,11 +80,11 @@ class XiuXianPlugin(Star):
         await self.db.connect()
         migration_manager = MigrationManager(self.db.conn, self.config_manager)
         await migration_manager.migrate()
-        logger.info("【修仙插件-简化版】已加载。")
+        logger.info("【修仙插件】已加载。")
 
     async def terminate(self):
         await self.db.close()
-        logger.info("【修仙插件-简化版】已卸载。")
+        logger.info("【修仙插件】已卸载。")
 
     @filter.command(CMD_HELP, "显示帮助信息")
     async def handle_help(self, event: AstrMessageEvent):

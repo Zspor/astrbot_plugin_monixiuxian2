@@ -7,7 +7,7 @@ from ..config_manager import ConfigManager
 from ..models import Player
 
 class CultivationManager:
-    """修炼管理器 - 简化版，包含角色生成和闭关修炼功能"""
+    """修炼管理器，包含角色生成和闭关修炼功能"""
 
     def __init__(self, config: AstrBotConfig, config_manager: ConfigManager):
         self.config = config
