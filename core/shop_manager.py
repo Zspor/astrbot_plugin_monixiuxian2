@@ -16,6 +16,21 @@ class ShopManager:
         self.config = config
         self.config_manager = config_manager
 
+    def _format_required_level(self, level_index: int) -> str:
+        """同时展示灵修/体修的需求境界名称"""
+        names = []
+        if 0 <= level_index < len(self.config_manager.level_data):
+            name = self.config_manager.level_data[level_index].get("level_name", "")
+            if name:
+                names.append(name)
+        if 0 <= level_index < len(self.config_manager.body_level_data):
+            name = self.config_manager.body_level_data[level_index].get("level_name", "")
+            if name and name not in names:
+                names.append(name)
+        if not names:
+            return "未知境界"
+        return " / ".join(names)
+
     def _get_all_shop_items(self) -> List[Dict]:
         """获取所有可以在商店出售的物品"""
         all_items = []
@@ -308,12 +323,12 @@ class ShopManager:
             details.append(f"描述: {data['description']}")
 
         # 添加属性信息
-        if item_type == 'weapon':
-            attrs = []
-            if data.get('magic_damage', 0) > 0:
-                attrs.append(f"法伤+{data['magic_damage']}")
-            if data.get('physical_damage', 0) > 0:
-                attrs.append(f"物伤+{data['physical_damage']}")
+            if item_type == 'weapon':
+                attrs = []
+                if data.get('magic_damage', 0) > 0:
+                    attrs.append(f"法伤+{data['magic_damage']}")
+                if data.get('physical_damage', 0) > 0:
+                    attrs.append(f"物伤+{data['physical_damage']}")
             if data.get('magic_defense', 0) > 0:
                 attrs.append(f"法防+{data['magic_defense']}")
             if data.get('physical_defense', 0) > 0:
@@ -323,9 +338,7 @@ class ShopManager:
             if attrs:
                 details.append(f"属性: {', '.join(attrs)}")
             if 'required_level_index' in data:
-                level_name = "炼气期"
-                if data['required_level_index'] < len(self.config_manager.level_data):
-                    level_name = self.config_manager.level_data[data['required_level_index']]['level_name']
+                level_name = self._format_required_level(data['required_level_index'])
                 details.append(f"需求境界: {level_name}")
 
         elif item_type in ['armor', 'main_technique', 'technique']:
@@ -350,9 +363,7 @@ class ShopManager:
 
         elif item_type in ['pill', 'exp_pill', 'utility_pill']:
             if 'required_level_index' in data and data['required_level_index'] > 0:
-                level_name = "炼气期"
-                if data['required_level_index'] < len(self.config_manager.level_data):
-                    level_name = self.config_manager.level_data[data['required_level_index']]['level_name']
+                level_name = self._format_required_level(data['required_level_index'])
                 details.append(f"需求境界: {level_name}")
 
         return "\n".join(details)

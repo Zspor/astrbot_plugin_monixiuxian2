@@ -277,6 +277,9 @@ class CultivationManager:
                 experience=0,
                 gold=initial_gold,
                 spiritual_qi=random.randint(100, 1000),
+                max_spiritual_qi=random.randint(100, 1000),
+                blood_qi=0,
+                max_blood_qi=0,
                 magic_damage=random.randint(5, 100),
                 physical_damage=5,
                 magic_defense=0,
@@ -284,7 +287,8 @@ class CultivationManager:
                 mental_power=random.randint(100, 500)
             )
         else:  # 体修
-            # 体修初始数据：寿命50-100，修为0，灵气0，法伤0，物伤100-500，法防50-200，物防100-500，精神力100-500
+            # 体修初始数据：寿命50-100，修为0，气血100-500，法伤0，物伤100-500，法防50-200，物防100-500，精神力100-500
+            initial_blood_qi = random.randint(100, 500)
             return Player(
                 user_id=user_id,
                 spiritual_root=f"{root}灵根",
@@ -293,6 +297,9 @@ class CultivationManager:
                 experience=0,
                 gold=initial_gold,
                 spiritual_qi=0,
+                max_spiritual_qi=0,
+                blood_qi=initial_blood_qi,
+                max_blood_qi=initial_blood_qi,
                 magic_damage=0,
                 physical_damage=random.randint(100, 500),
                 magic_defense=random.randint(50, 200),

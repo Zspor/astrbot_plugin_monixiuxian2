@@ -30,11 +30,11 @@ class DataBase:
             INSERT INTO players (
                 user_id, level_index, spiritual_root, cultivation_type, lifespan,
                 experience, gold, state, cultivation_start_time, last_check_in_date,
-                spiritual_qi, max_spiritual_qi, magic_damage, physical_damage,
-                magic_defense, physical_defense, mental_power,
+                spiritual_qi, max_spiritual_qi, blood_qi, max_blood_qi,
+                magic_damage, physical_damage, magic_defense, physical_defense, mental_power,
                 weapon, armor, main_technique, techniques,
                 active_pill_effects, permanent_pill_gains, has_resurrection_pill, has_debuff_shield, pills_inventory
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 player.user_id,
@@ -49,6 +49,8 @@ class DataBase:
                 player.last_check_in_date,
                 player.spiritual_qi,
                 player.max_spiritual_qi,
+                player.blood_qi,
+                player.max_blood_qi,
                 player.magic_damage,
                 player.physical_damage,
                 player.magic_defense,
@@ -94,6 +96,8 @@ class DataBase:
                 last_check_in_date = ?,
                 spiritual_qi = ?,
                 max_spiritual_qi = ?,
+                blood_qi = ?,
+                max_blood_qi = ?,
                 magic_damage = ?,
                 physical_damage = ?,
                 magic_defense = ?,
@@ -122,6 +126,8 @@ class DataBase:
                 player.last_check_in_date,
                 player.spiritual_qi,
                 player.max_spiritual_qi,
+                player.blood_qi,
+                player.max_blood_qi,
                 player.magic_damage,
                 player.physical_damage,
                 player.magic_defense,
@@ -198,16 +204,19 @@ class DataBase:
         )
         await self.conn.commit()
 
-    async def decrement_shop_item_stock(self, shop_id: str, item_name: str) -> tuple[bool, int, int]:
-        """尝试扣减指定商店物品的库存（原子操作）
+    async def decrement_shop_item_stock(self, shop_id: str, item_name: str, quantity: int = 1) -> tuple[bool, int, int]:
+        """尝试扣减指定商店物品的库存（原子操作，可批量）
 
         Args:
             shop_id: 商店ID
             item_name: 物品名称
+            quantity: 扣减数量（默认1，最小1）
 
         Returns:
             (是否成功, last_refresh_time, 扣减后的库存数量)
         """
+        # 防御性：至少扣减1
+        quantity = max(1, int(quantity))
         await self.conn.execute("BEGIN IMMEDIATE")
         try:
             async with self.conn.execute(
@@ -241,7 +250,11 @@ class DataBase:
                 await self.conn.rollback()
                 return False, last_refresh_time, max(stock or 0, 0)
 
-            new_stock = stock - 1
+            if stock < quantity:
+                await self.conn.rollback()
+                return False, last_refresh_time, stock
+
+            new_stock = stock - quantity
             current_items[target_index]['stock'] = new_stock
 
             items_json = json.dumps(current_items, ensure_ascii=False)
@@ -255,8 +268,9 @@ class DataBase:
             await self.conn.rollback()
             raise
 
-    async def increment_shop_item_stock(self, shop_id: str, item_name: str):
-        """回滚库存（在购买失败时恢复库存）"""
+    async def increment_shop_item_stock(self, shop_id: str, item_name: str, quantity: int = 1):
+        """回滚库存（在购买失败时恢复库存），支持批量"""
+        quantity = max(1, int(quantity))
         await self.conn.execute("BEGIN IMMEDIATE")
         try:
             async with self.conn.execute(
@@ -278,7 +292,7 @@ class DataBase:
             for item in current_items:
                 if item.get('name') == item_name:
                     current_stock = item.get('stock', 0) or 0
-                    item['stock'] = current_stock + 1
+                    item['stock'] = current_stock + quantity
                     break
 
             items_json = json.dumps(current_items, ensure_ascii=False)

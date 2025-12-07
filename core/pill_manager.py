@@ -16,6 +16,32 @@ class PillManager:
         self.db = db
         self.config_manager = config_manager
 
+    def _ensure_non_negative_attributes(self, player: Player):
+        """保证属性不为负，并同步能量上限约束"""
+        attrs = [
+            "lifespan",
+            "experience",
+            "physical_damage",
+            "magic_damage",
+            "physical_defense",
+            "magic_defense",
+            "mental_power",
+            "spiritual_qi",
+            "max_spiritual_qi",
+            "blood_qi",
+            "max_blood_qi",
+        ]
+        for attr in attrs:
+            value = getattr(player, attr, 0)
+            if value < 0:
+                setattr(player, attr, 0)
+
+        # 保证当前能量不超过上限
+        if player.spiritual_qi > player.max_spiritual_qi:
+            player.spiritual_qi = player.max_spiritual_qi
+        if player.blood_qi > player.max_blood_qi:
+            player.blood_qi = player.max_blood_qi
+
     def get_pill_by_name(self, pill_name: str) -> Optional[dict]:
         """根据名称获取丹药配置
 
@@ -292,10 +318,11 @@ class PillManager:
                 "mental_power": 0,
                 "lifespan": 0,
                 "max_spiritual_qi": 0,
+                "max_blood_qi": 0,
             }
 
         # 计算基础属性（当前境界突破时获得的属性）
-        base_attrs = self._get_base_attributes_for_level(player.level_index)
+        base_attrs = self._get_base_attributes_for_level(player, player.level_index)
 
         # 检查各项属性是否已达上限
         attr_mapping = {
@@ -306,6 +333,7 @@ class PillManager:
             "mental_power_gain": ("mental_power", "精神力"),
             "lifespan_gain": ("lifespan", "寿命"),
             "max_spiritual_qi_gain": ("max_spiritual_qi", "最大灵气"),
+            "max_blood_qi_gain": ("max_blood_qi", "最大气血"),
         }
 
         gains_applied = {}
@@ -363,6 +391,9 @@ class PillManager:
         if not gains_applied:
             return False, "该丹药的所有属性增益都已达到上限，无法使用！"
 
+        # 修正属性下限与能量上限
+        self._ensure_non_negative_attributes(player)
+
         # 更新玩家数据
         player.set_permanent_pill_gains(permanent_gains)
 
@@ -404,17 +435,41 @@ class PillManager:
             "━━━━━━━━━━━━━━━"
         ]
 
-        # 恢复灵气
-        if "spiritual_qi_restore" in pill_data:
-            restore = pill_data["spiritual_qi_restore"]
-            if restore == -1:
+        # 恢复能量（灵气/气血）
+        energy_restore = None
+        energy_label = "灵气"
+        current_energy = player.spiritual_qi
+        max_energy = player.max_spiritual_qi
+
+        # 体修优先使用专属气血恢复键；若无则复用灵气恢复作为气血恢复
+        if player.cultivation_type == "体修" and "blood_qi_restore" in pill_data:
+            energy_restore = pill_data["blood_qi_restore"]
+            energy_label = "气血"
+            current_energy = player.blood_qi
+            max_energy = player.max_blood_qi
+        elif "spiritual_qi_restore" in pill_data:
+            energy_restore = pill_data["spiritual_qi_restore"]
+            if player.cultivation_type == "体修":
+                energy_label = "气血"
+                current_energy = player.blood_qi
+                max_energy = player.max_blood_qi
+
+        if energy_restore is not None:
+            if energy_restore == -1:
                 # 恢复至满
-                player.spiritual_qi = player.max_spiritual_qi
-                msg_parts.append(f"🌟 灵气已恢复至满：{player.max_spiritual_qi}")
+                current_energy = max_energy
+                actual_restore = max_energy
             else:
-                old_qi = player.spiritual_qi
-                player.spiritual_qi = min(player.spiritual_qi + restore, player.max_spiritual_qi)
-                actual_restore = player.spiritual_qi - old_qi
+                old_energy = current_energy
+                current_energy = min(current_energy + energy_restore, max_energy)
+                actual_restore = current_energy - old_energy
+
+            if energy_label == "气血":
+                player.blood_qi = current_energy
+                msg_parts.append(f"🌟 恢复气血：+{actual_restore}")
+                msg_parts.append(f"🩸 当前气血：{player.blood_qi}/{player.max_blood_qi}")
+            else:
+                player.spiritual_qi = current_energy
                 msg_parts.append(f"🌟 恢复灵气：+{actual_restore}")
                 msg_parts.append(f"💫 当前灵气：{player.spiritual_qi}/{player.max_spiritual_qi}")
 
@@ -451,19 +506,27 @@ class PillManager:
         msg_parts.append("━━━━━━━━━━━━━━━")
         return True, "\n".join(msg_parts)
 
-    def _get_base_attributes_for_level(self, level_index: int) -> dict:
+    def _get_base_attributes_for_level(self, player: Player, level_index: int) -> dict:
         """获取当前境界的基础属性（用于计算30%上限）
 
         Args:
+            player: 玩家对象，用于确定修炼类型
             level_index: 境界索引
 
         Returns:
             基础属性字典
         """
-        if level_index >= len(self.config_manager.level_data):
-            level_index = len(self.config_manager.level_data) - 1
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
+        # 兜底：如果数据为空，使用灵修配置避免索引错误
+        if not level_data:
+            level_data = self.config_manager.level_data
 
-        level_config = self.config_manager.level_data[level_index]
+        # 越界保护
+        if level_data:
+            level_index = min(level_index, len(level_data) - 1)
+            level_config = level_data[level_index]
+        else:
+            level_config = {}
 
         return {
             "physical_damage": level_config.get("breakthrough_physical_damage_gain", 10),
@@ -473,6 +536,7 @@ class PillManager:
             "mental_power": level_config.get("breakthrough_mental_power_gain", 100),
             "lifespan": level_config.get("breakthrough_lifespan_gain", 100),
             "max_spiritual_qi": level_config.get("breakthrough_spiritual_qi_gain", 100),
+            "max_blood_qi": level_config.get("breakthrough_blood_qi_gain", 100),
         }
 
     async def handle_resurrection(self, player: Player) -> bool:
@@ -502,6 +566,10 @@ class PillManager:
         player.mental_power = player.mental_power // 2
         player.max_spiritual_qi = player.max_spiritual_qi // 2
         player.spiritual_qi = player.max_spiritual_qi // 2
+        player.max_blood_qi = player.max_blood_qi // 2
+        player.blood_qi = player.max_blood_qi // 2
+
+        self._ensure_non_negative_attributes(player)
 
         await self.db.update_player(player)
         return True
@@ -667,6 +735,19 @@ class PillManager:
             total_qi = effect["spiritual_qi_regen_per_minute"] * minutes
             player.spiritual_qi = min(player.max_spiritual_qi, player.spiritual_qi + total_qi)
             changed = True
+
+        if "blood_qi_regen_per_minute" in effect:
+            total_blood = effect["blood_qi_regen_per_minute"] * minutes
+            player.blood_qi = min(player.max_blood_qi, player.blood_qi + total_blood)
+            changed = True
+
+        if "blood_qi_cost_per_minute" in effect:
+            total_cost = effect["blood_qi_cost_per_minute"] * minutes
+            player.blood_qi = max(0, player.blood_qi - total_cost)
+            changed = True
+
+        if changed:
+            self._ensure_non_negative_attributes(player)
 
         return changed
 

@@ -11,13 +11,27 @@ class ConfigManager:
 
     def __init__(self, base_dir: Path):
         self._base_dir = base_dir
-        self.level_data: List[dict] = []
+        self.level_data: List[dict] = []  # 灵修境界数据
+        self.body_level_data: List[dict] = []  # 体修境界数据
         self.items_data: Dict[str, dict] = {}  # 物品数据，key为物品名称
         self.weapons_data: Dict[str, dict] = {}  # 武器数据，key为武器名称
         self.pills_data: Dict[str, dict] = {}  # 破境丹数据，key为丹药名称
         self.exp_pills_data: Dict[str, dict] = {}  # 修为丹数据，key为丹药名称
         self.utility_pills_data: Dict[str, dict] = {}  # 功能丹数据，key为丹药名称
         self._load_all()
+
+    def get_level_data(self, cultivation_type: str = "灵修") -> List[dict]:
+        """根据修炼类型获取对应的境界数据
+
+        Args:
+            cultivation_type: 修炼类型，"灵修"或"体修"
+
+        Returns:
+            对应的境界数据列表
+        """
+        if cultivation_type == "体修":
+            return self.body_level_data
+        return self.level_data
 
     def _load_json_data(self, file_path: Path) -> List[dict]:
         """加载JSON配置文件（列表格式）"""
@@ -69,8 +83,13 @@ class ConfigManager:
 
     def _load_all(self):
         """加载所有配置文件"""
+        # 加载灵修境界配置
         level_path = self._base_dir / "config" / "level_config.json"
         self.level_data = self._load_json_data(level_path)
+
+        # 加载体修境界配置
+        body_level_path = self._base_dir / "config" / "body_level_config.json"
+        self.body_level_data = self._load_json_data(body_level_path)
 
         items_path = self._base_dir / "config" / "items.json"
         self.items_data = self._load_items_data(items_path)
@@ -89,7 +108,8 @@ class ConfigManager:
 
         logger.info(
             f"配置管理器初始化完成，"
-            f"加载了 {len(self.level_data)} 个境界配置，"
+            f"加载了 {len(self.level_data)} 个灵修境界配置，"
+            f"{len(self.body_level_data)} 个体修境界配置，"
             f"{len(self.items_data)} 个物品配置，"
             f"{len(self.weapons_data)} 个武器配置，"
             f"{len(self.pills_data)} 个破境丹配置，"

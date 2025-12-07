@@ -22,6 +22,21 @@ class PillHandler:
         self.config_manager = config_manager
         self.pill_manager = PillManager(db, config_manager)
 
+    def _format_required_level(self, level_index: int) -> str:
+        """同时展示灵修/体修的需求境界名称"""
+        names = []
+        if 0 <= level_index < len(self.config_manager.level_data):
+            name = self.config_manager.level_data[level_index].get("level_name", "")
+            if name:
+                names.append(name)
+        if 0 <= level_index < len(self.config_manager.body_level_data):
+            name = self.config_manager.body_level_data[level_index].get("level_name", "")
+            if name and name not in names:
+                names.append(name)
+        if not names:
+            return "未知境界"
+        return " / ".join(names)
+
     @player_required
     async def handle_use_pill(self, player: Player, event: AstrMessageEvent, pill_name: str = ""):
         """处理服用丹药指令
@@ -143,8 +158,8 @@ class PillHandler:
 
         # 需求境界
         required_level = pill_data.get('required_level_index', 0)
-        if required_level > 0 and required_level < len(self.config_manager.level_data):
-            level_name = self.config_manager.level_data[required_level]['level_name']
+        if required_level > 0:
+            level_name = self._format_required_level(required_level)
             info_lines.append(f"需求境界：{level_name}")
 
         # 价格

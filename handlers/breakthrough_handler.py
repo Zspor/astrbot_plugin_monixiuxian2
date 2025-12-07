@@ -28,8 +28,11 @@ class BreakthroughHandler:
         """查看突破信息"""
         display_name = event.get_sender_name()
 
+        # 根据修炼类型获取对应的境界数据
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
+
         # 检查是否已经是最高境界
-        if player.level_index >= len(self.config_manager.level_data) - 1:
+        if player.level_index >= len(level_data) - 1:
             yield event.plain_result("你已经达到了最高境界，无法继续突破！")
             return
 
@@ -37,8 +40,8 @@ class BreakthroughHandler:
         modifiers = self.pill_manager.get_breakthrough_modifiers(player)
 
         # 获取当前和下一境界信息
-        current_level_data = self.config_manager.level_data[player.level_index]
-        next_level_data = self.config_manager.level_data[player.level_index + 1]
+        current_level_data = level_data[player.level_index]
+        next_level_data = level_data[player.level_index + 1]
 
         current_level_name = current_level_data["level_name"]
         next_level_name = next_level_data["level_name"]
@@ -96,15 +99,27 @@ class BreakthroughHandler:
         else:
             info_lines.append(f"\n暂无适用的破境丹\n")
 
-        info_lines.extend([
-            f"━━━━━━━━━━━━━━━\n",
-            f"【突破说明】\n",
-            f"• 使用命令：{CMD_BREAKTHROUGH} 或 {CMD_BREAKTHROUGH} [破境丹名称]\n",
-            f"• 突破成功：境界提升，实力大增\n",
-            f"• 突破失败：损失10%修为，有概率死亡\n",
-            f"• 死亡后：所有数据清除，需重新入仙途\n",
-            f"=" * 28
-        ])
+        # 根据修炼类型显示不同的突破说明
+        if player.cultivation_type == "体修":
+            info_lines.extend([
+                f"━━━━━━━━━━━━━━━\n",
+                f"【突破说明】\n",
+                f"• 使用命令：{CMD_BREAKTHROUGH} 或 {CMD_BREAKTHROUGH} [破境丹名称]\n",
+                f"• 突破成功：境界提升，肉身更强\n",
+                f"• 突破失败：损失10%修为，有概率死亡\n",
+                f"• 死亡后：所有数据清除，需重新入仙途\n",
+                f"=" * 28
+            ])
+        else:
+            info_lines.extend([
+                f"━━━━━━━━━━━━━━━\n",
+                f"【突破说明】\n",
+                f"• 使用命令：{CMD_BREAKTHROUGH} 或 {CMD_BREAKTHROUGH} [破境丹名称]\n",
+                f"• 突破成功：境界提升，实力大增\n",
+                f"• 突破失败：损失10%修为，有概率死亡\n",
+                f"• 死亡后：所有数据清除，需重新入仙途\n",
+                f"=" * 28
+            ])
 
         yield event.plain_result("".join(info_lines))
 
@@ -115,6 +130,9 @@ class BreakthroughHandler:
 
         await self.pill_manager.update_temporary_effects(player)
         modifiers = self.pill_manager.get_breakthrough_modifiers(player)
+
+        # 根据修炼类型获取对应的境界数据
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
 
         # 如果指定了破境丹，验证其有效性
         if pill_name and pill_name.strip():
@@ -132,7 +150,7 @@ class BreakthroughHandler:
             # 检查是否适用于当前突破
             target_level = pill_data.get("target_level_index", -1)
             if target_level != player.level_index + 1:
-                current_level = self.config_manager.level_data[player.level_index]["level_name"]
+                current_level = level_data[player.level_index]["level_name"]
                 yield event.plain_result(
                     f"❌ {pill_name} 不适用于当前突破\n"
                     f"当前境界：{current_level}\n"

@@ -47,7 +47,7 @@ class PlayerHandler:
                 "🌟 欢迎踏入修仙之路！\n"
                 "━━━━━━━━━━━━━━━\n"
                 "请选择你的修炼方式：\n\n"
-                "【灵修】\n"
+                "【灵修】以灵气为主，法术攻击\n"
                 "• 寿命：100\n"
                 "• 灵气：100-1000\n"
                 "• 法伤：5-100\n"
@@ -55,9 +55,9 @@ class PlayerHandler:
                 "• 法防：0\n"
                 "• 物防：5\n"
                 "• 精神力：100-500\n\n"
-                "【体修】\n"
+                "【体修】以气血为主，肉身强横\n"
                 "• 寿命：50-100\n"
-                "• 灵气：0\n"
+                "• 气血：100-500\n"
                 "• 法伤：0\n"
                 "• 物伤：100-500\n"
                 "• 法防：50-200\n"
@@ -116,7 +116,7 @@ class PlayerHandler:
         await self.pill_manager.update_temporary_effects(player)
         pill_multipliers = self.pill_manager.calculate_pill_attribute_effects(player)
 
-        # 获取装备加成后的灵气容量
+        # 获取装备加成后的属性
         from ..core import EquipmentManager
         equipment_manager = EquipmentManager(self.db)
         equipped_items = equipment_manager.get_equipped_items(
@@ -126,25 +126,48 @@ class PlayerHandler:
         )
         total_attrs = player.get_total_attributes(equipped_items, pill_multipliers)
 
-        reply_msg = (
-            f"--- 道友 {display_name} 的信息 ---\n"
-            f"修炼方式：{player.cultivation_type}\n"
-            f"境界：{player.get_level(self.config_manager)}\n"
-            f"灵根：{player.spiritual_root}\n"
-            f"修为：{player.experience}/{required_exp}\n"
-            f"灵石：{player.gold}\n"
-            f"状态：{player.state}\n"
-            "--- 基础属性 ---\n"
-            f"⏳ 寿命: {player.lifespan}\n"
-            f"🧠 精神力: {total_attrs['mental_power']}\n"
-            "--- 战斗属性 ---\n"
-            f"✨ 灵气: {player.spiritual_qi}/{total_attrs['max_spiritual_qi']}\n"
-            f"⚔️ 法伤: {total_attrs['magic_damage']}\n"
-            f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
-            f"🛡️ 法防: {total_attrs['magic_defense']}\n"
-            f"🪨 物防: {total_attrs['physical_defense']}\n"
-            f"--------------------------"
-        )
+        # 根据修炼类型显示不同的信息
+        if player.cultivation_type == "体修":
+            # 体修显示气血，不显示法伤
+            reply_msg = (
+                f"--- 道友 {display_name} 的信息 ---\n"
+                f"修炼方式：{player.cultivation_type}\n"
+                f"境界：{player.get_level(self.config_manager)}\n"
+                f"灵根：{player.spiritual_root}\n"
+                f"修为：{player.experience}/{required_exp}\n"
+                f"灵石：{player.gold}\n"
+                f"状态：{player.state}\n"
+                "--- 基础属性 ---\n"
+                f"⏳ 寿命: {player.lifespan}\n"
+                f"🧠 精神力: {total_attrs['mental_power']}\n"
+                "--- 战斗属性 ---\n"
+                f"🩸 气血: {player.blood_qi}/{total_attrs['max_blood_qi']}\n"
+                f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
+                f"🪨 物防: {total_attrs['physical_defense']}\n"
+                f"🛡️ 法防: {total_attrs['magic_defense']}\n"
+                f"--------------------------"
+            )
+        else:
+            # 灵修显示灵气和法伤
+            reply_msg = (
+                f"--- 道友 {display_name} 的信息 ---\n"
+                f"修炼方式：{player.cultivation_type}\n"
+                f"境界：{player.get_level(self.config_manager)}\n"
+                f"灵根：{player.spiritual_root}\n"
+                f"修为：{player.experience}/{required_exp}\n"
+                f"灵石：{player.gold}\n"
+                f"状态：{player.state}\n"
+                "--- 基础属性 ---\n"
+                f"⏳ 寿命: {player.lifespan}\n"
+                f"🧠 精神力: {total_attrs['mental_power']}\n"
+                "--- 战斗属性 ---\n"
+                f"✨ 灵气: {player.spiritual_qi}/{total_attrs['max_spiritual_qi']}\n"
+                f"⚔️ 法伤: {total_attrs['magic_damage']}\n"
+                f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
+                f"🛡️ 法防: {total_attrs['magic_defense']}\n"
+                f"🪨 物防: {total_attrs['physical_defense']}\n"
+                f"--------------------------"
+            )
         yield event.plain_result(reply_msg)
 
     @player_required

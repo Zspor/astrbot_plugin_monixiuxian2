@@ -75,8 +75,10 @@ class Player:
     techniques: str = "[]"  # 功法列表（JSON字符串，最多3个）
 
     # 新的战斗属性
-    spiritual_qi: int = 100  # 当前灵气
-    max_spiritual_qi: int = 1000  # 最大灵气容量
+    spiritual_qi: int = 100  # 当前灵气（灵修专用）
+    max_spiritual_qi: int = 1000  # 最大灵气容量（灵修专用）
+    blood_qi: int = 0  # 当前气血（体修专用）
+    max_blood_qi: int = 0  # 最大气血容量（体修专用）
     magic_damage: int = 10  # 法伤
     physical_damage: int = 10  # 物伤
     magic_defense: int = 5  # 法防
@@ -92,14 +94,16 @@ class Player:
 
     def get_level(self, config_manager: "ConfigManager") -> str:
         """获取境界名称"""
-        if 0 <= self.level_index < len(config_manager.level_data):
-            return config_manager.level_data[self.level_index]["level_name"]
+        level_data = config_manager.get_level_data(self.cultivation_type)
+        if 0 <= self.level_index < len(level_data):
+            return level_data[self.level_index]["level_name"]
         return "未知境界"
 
     def get_required_exp(self, config_manager: "ConfigManager") -> int:
         """获取突破到下一境界所需的总修为"""
-        if self.level_index + 1 < len(config_manager.level_data):
-            return config_manager.level_data[self.level_index + 1].get("exp_needed", 0)
+        level_data = config_manager.get_level_data(self.cultivation_type)
+        if self.level_index + 1 < len(level_data):
+            return level_data[self.level_index + 1].get("exp_needed", 0)
         return 0
 
     def get_techniques_list(self) -> List[str]:
@@ -160,6 +164,8 @@ class Player:
         total = {
             "spiritual_qi": self.spiritual_qi,
             "max_spiritual_qi": self.max_spiritual_qi,
+            "blood_qi": self.blood_qi,
+            "max_blood_qi": self.max_blood_qi,
             "magic_damage": self.magic_damage,
             "physical_damage": self.physical_damage,
             "magic_defense": self.magic_defense,

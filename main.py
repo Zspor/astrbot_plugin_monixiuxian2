@@ -29,7 +29,7 @@ CMD_REFRESH_SHOP = "刷新商店"
     "astrbot_plugin_xiuxian_lite",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏",
-    "1.0.0dev",
+    "1.0.1dev",
     "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):

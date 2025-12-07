@@ -95,7 +95,18 @@ class ShopHandler:
             yield event.plain_result("请指定要购买的物品名称，例如：购买 青铜剑")
             return
 
-        item_name = item_name.strip()
+        item_input = item_name.strip()
+
+        # 支持“物品名 数量”格式，默认数量为1
+        quantity = 1
+        parts = item_input.rsplit(" ", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            quantity = max(1, int(parts[1]))
+            item_name = parts[0].strip()
+            if not item_name:
+                item_name = parts[0]
+        else:
+            item_name = item_input
 
         # 确保商店已刷新
         await self._ensure_shop_refreshed()
@@ -113,11 +124,18 @@ class ShopHandler:
             yield event.plain_result(f"【{item_name}】已售罄，请等待商店刷新。")
             return
 
+        if quantity > stock:
+            yield event.plain_result(f"【{item_name}】库存不足，最多可购买 {stock} 件。")
+            return
+
         price = target_item['price']
-        if player.gold < price:
+        total_price = price * quantity
+        if player.gold < total_price:
             yield event.plain_result(
                 f"灵石不足！\n"
                 f"【{target_item['name']}】价格: {price} 灵石\n"
+                f"购买数量: {quantity}\n"
+                f"需要灵石: {total_price}\n"
                 f"你的灵石: {player.gold}"
             )
             return
@@ -128,6 +146,9 @@ class ShopHandler:
 
         parsed_item = None
         if item_type in ['weapon', 'armor', 'main_technique', 'technique']:
+            if quantity > 1:
+                yield event.plain_result("装备类物品一次只能购买1件，请重新输入数量为1。")
+                return
             parsed_item = self.equipment_manager.parse_item_from_name(
                 target_item['name'],
                 self.config_manager.items_data,
@@ -139,7 +160,7 @@ class ShopHandler:
 
         # 预扣库存，避免并发情况下的超卖
         try:
-            reserved, _, remaining_stock = await self.db.decrement_shop_item_stock("global", target_item['name'])
+            reserved, _, remaining_stock = await self.db.decrement_shop_item_stock("global", target_item['name'], quantity)
         except Exception as e:
             logger.error(f"扣减库存失败: {e}")
             reserved = False
@@ -153,25 +174,25 @@ class ShopHandler:
             if item_type in ['weapon', 'armor', 'main_technique', 'technique']:
                 success, message = await self.equipment_manager.equip_item(player, parsed_item)
                 if not success:
-                    await self.db.increment_shop_item_stock("global", target_item['name'])
+                    await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
                     yield event.plain_result(message)
                     return
                 result_lines.append(message)
             elif item_type in ['pill', 'exp_pill', 'utility_pill']:
                 pill_name = target_item['name']
-                await self.pill_manager.add_pill_to_inventory(player, pill_name)
-                result_lines.append(f"成功购买【{pill_name}】x1。")
+                await self.pill_manager.add_pill_to_inventory(player, pill_name, count=quantity)
+                result_lines.append(f"成功购买【{pill_name}】x{quantity}。")
                 result_lines.append("丹药已添加到背包。")
             else:
-                await self.db.increment_shop_item_stock("global", target_item['name'])
+                await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
                 yield event.plain_result(f"未知的物品类型：{item_type}")
                 return
 
             # 扣除灵石并保存
-            player.gold -= price
+            player.gold -= total_price
             await self.db.update_player(player)
 
-            result_lines.append(f"花费灵石: {price}")
+            result_lines.append(f"花费灵石: {total_price}")
             result_lines.append(f"剩余灵石: {player.gold}")
             if remaining_stock > 0:
                 result_lines.append(f"剩余库存: {remaining_stock}")
@@ -180,7 +201,7 @@ class ShopHandler:
 
             yield event.plain_result("\n".join(result_lines))
         except Exception as e:
-            await self.db.increment_shop_item_stock("global", target_item['name'])
+            await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
             logger.error(f"购买流程异常，已回滚库存: {e}")
             raise
 

@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 8  # 版本号提升 - 添加商店系统
+LATEST_DB_VERSION = 9  # 版本号提升 - 添加体修气血系统
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -185,6 +185,17 @@ async def _migrate_to_v8(conn: aiosqlite.Connection, config_manager: ConfigManag
 
     logger.info("v8迁移完成：商店系统")
 
+@migration(9)
+async def _migrate_to_v9(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v9 - 添加体修气血系统"""
+    logger.info("开始迁移到v9：添加体修气血系统")
+
+    # 添加气血字段
+    await conn.execute("ALTER TABLE players ADD COLUMN blood_qi INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN max_blood_qi INTEGER NOT NULL DEFAULT 0")
+
+    logger.info("v9迁移完成：体修气血系统")
+
 
 async def _create_all_tables_v2(conn: aiosqlite.Connection):
     """创建所有表 - v2版本，新属性系统（灵修/体修）"""
@@ -211,6 +222,8 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             last_check_in_date TEXT NOT NULL DEFAULT '',
             spiritual_qi INTEGER NOT NULL DEFAULT 100,
             max_spiritual_qi INTEGER NOT NULL DEFAULT 1000,
+            blood_qi INTEGER NOT NULL DEFAULT 0,
+            max_blood_qi INTEGER NOT NULL DEFAULT 0,
             magic_damage INTEGER NOT NULL DEFAULT 10,
             physical_damage INTEGER NOT NULL DEFAULT 10,
             magic_defense INTEGER NOT NULL DEFAULT 5,

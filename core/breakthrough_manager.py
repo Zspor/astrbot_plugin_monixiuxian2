@@ -26,18 +26,21 @@ class BreakthroughManager:
         Returns:
             (是否满足, 错误消息)
         """
+        # 根据修炼类型获取对应的境界数据
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
+
         # 检查是否已经是最高境界
-        if player.level_index >= len(self.config_manager.level_data) - 1:
+        if player.level_index >= len(level_data) - 1:
             return False, "你已经达到了最高境界，无法继续突破！"
 
         # 获取下一境界所需修为
         next_level_index = player.level_index + 1
-        next_level_data = self.config_manager.level_data[next_level_index]
+        next_level_data = level_data[next_level_index]
         required_exp = next_level_data.get("exp_needed", 0)
 
         # 检查修为是否满足
         if player.experience < required_exp:
-            current_level = self.config_manager.level_data[player.level_index]["level_name"]
+            current_level = level_data[player.level_index]["level_name"]
             next_level = next_level_data["level_name"]
             return False, (
                 f"修为不足！\n"
@@ -63,9 +66,12 @@ class BreakthroughManager:
         Returns:
             (成功率, 说明信息)
         """
+        # 根据修炼类型获取对应的境界数据
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
+
         # 获取基础成功率
         next_level_index = player.level_index + 1
-        next_level_data = self.config_manager.level_data[next_level_index]
+        next_level_data = level_data[next_level_index]
         base_success_rate = next_level_data.get("success_rate", 0.5)
 
         info_lines = [
@@ -123,13 +129,16 @@ class BreakthroughManager:
         # 计算成功率
         success_rate, rate_info = self.calculate_breakthrough_success_rate(player, pill_name, temp_bonus)
 
+        # 根据修炼类型获取对应的境界数据
+        level_data = self.config_manager.get_level_data(player.cultivation_type)
+
         # 判定突破结果
         random_value = random.random()
         breakthrough_success = random_value < success_rate
 
-        current_level_name = self.config_manager.level_data[player.level_index]["level_name"]
+        current_level_name = level_data[player.level_index]["level_name"]
         next_level_index = player.level_index + 1
-        next_level_data = self.config_manager.level_data[next_level_index]
+        next_level_data = level_data[next_level_index]
         next_level_name = next_level_data["level_name"]
 
         if breakthrough_success:
@@ -140,12 +149,27 @@ class BreakthroughManager:
             # 直接从下一境界配置中读取突破增量，并累加到玩家属性上
             # 这样可以保留玩家初始化时的随机属性值
             lifespan_gain = next_level_data.get("breakthrough_lifespan_gain", 0)
-            spiritual_qi_gain = next_level_data.get("breakthrough_spiritual_qi_gain", 0)
             mental_power_gain = next_level_data.get("breakthrough_mental_power_gain", 0)
             physical_damage_gain = next_level_data.get("breakthrough_physical_damage_gain", 0)
             magic_damage_gain = next_level_data.get("breakthrough_magic_damage_gain", 0)
             physical_defense_gain = next_level_data.get("breakthrough_physical_defense_gain", 0)
             magic_defense_gain = next_level_data.get("breakthrough_magic_defense_gain", 0)
+
+            # 根据修炼类型处理灵气/气血增长
+            if player.cultivation_type == "体修":
+                # 体修使用气血
+                blood_qi_gain = next_level_data.get("breakthrough_blood_qi_gain", 0)
+                player.max_blood_qi += blood_qi_gain
+                player.blood_qi = player.max_blood_qi  # 恢复满气血
+                energy_name = "气血"
+                energy_gain = blood_qi_gain
+            else:
+                # 灵修使用灵气
+                spiritual_qi_gain = next_level_data.get("breakthrough_spiritual_qi_gain", 0)
+                player.max_spiritual_qi += spiritual_qi_gain
+                player.spiritual_qi = player.max_spiritual_qi  # 恢复满灵气
+                energy_name = "灵气"
+                energy_gain = spiritual_qi_gain
 
             # 应用属性增长
             player.lifespan += lifespan_gain
@@ -153,39 +177,60 @@ class BreakthroughManager:
             player.magic_damage += magic_damage_gain
             player.physical_defense += physical_defense_gain
             player.magic_defense += magic_defense_gain
-            player.max_spiritual_qi += spiritual_qi_gain
             player.mental_power += mental_power_gain
-
-            # 恢复满灵气
-            player.spiritual_qi = player.max_spiritual_qi
 
             # 保存到数据库
             await self.db.update_player(player)
 
-            success_msg = (
-                f"✨ 突破成功！✨\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"{rate_info}\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"恭喜你从【{current_level_name}】突破至【{next_level_name}】！\n"
-                f"境界提升，实力大增！\n"
-                f"\n【属性增长】\n"
-                f"寿命 +{lifespan_gain}\n"
-                f"最大灵气 +{spiritual_qi_gain}\n"
-                f"法伤 +{magic_damage_gain}\n"
-                f"物伤 +{physical_damage_gain}\n"
-                f"法防 +{magic_defense_gain}\n"
-                f"物防 +{physical_defense_gain}\n"
-                f"精神力 +{mental_power_gain}\n"
-                f"\n【当前属性】\n"
-                f"寿命：{player.lifespan}\n"
-                f"最大灵气：{player.max_spiritual_qi}\n"
-                f"法伤：{player.magic_damage}\n"
-                f"物伤：{player.physical_damage}\n"
-                f"法防：{player.magic_defense}\n"
-                f"物防：{player.physical_defense}\n"
-                f"精神力：{player.mental_power}"
-            )
+            # 根据修炼类型生成不同的成功消息
+            if player.cultivation_type == "体修":
+                success_msg = (
+                    f"✨ 突破成功！✨\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"{rate_info}\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"恭喜你从【{current_level_name}】突破至【{next_level_name}】！\n"
+                    f"境界提升，肉身更加强横！\n"
+                    f"\n【属性增长】\n"
+                    f"寿命 +{lifespan_gain}\n"
+                    f"最大气血 +{energy_gain}\n"
+                    f"物伤 +{physical_damage_gain}\n"
+                    f"物防 +{physical_defense_gain}\n"
+                    f"法防 +{magic_defense_gain}\n"
+                    f"精神力 +{mental_power_gain}\n"
+                    f"\n【当前属性】\n"
+                    f"寿命：{player.lifespan}\n"
+                    f"最大气血：{player.max_blood_qi}\n"
+                    f"物伤：{player.physical_damage}\n"
+                    f"物防：{player.physical_defense}\n"
+                    f"法防：{player.magic_defense}\n"
+                    f"精神力：{player.mental_power}"
+                )
+            else:
+                success_msg = (
+                    f"✨ 突破成功！✨\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"{rate_info}\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"恭喜你从【{current_level_name}】突破至【{next_level_name}】！\n"
+                    f"境界提升，实力大增！\n"
+                    f"\n【属性增长】\n"
+                    f"寿命 +{lifespan_gain}\n"
+                    f"最大灵气 +{energy_gain}\n"
+                    f"法伤 +{magic_damage_gain}\n"
+                    f"物伤 +{physical_damage_gain}\n"
+                    f"法防 +{magic_defense_gain}\n"
+                    f"物防 +{physical_defense_gain}\n"
+                    f"精神力 +{mental_power_gain}\n"
+                    f"\n【当前属性】\n"
+                    f"寿命：{player.lifespan}\n"
+                    f"最大灵气：{player.max_spiritual_qi}\n"
+                    f"法伤：{player.magic_damage}\n"
+                    f"物伤：{player.physical_damage}\n"
+                    f"法防：{player.magic_defense}\n"
+                    f"物防：{player.physical_defense}\n"
+                    f"精神力：{player.mental_power}"
+                )
 
             logger.info(
                 f"玩家 {player.user_id} 突破成功：{current_level_name} -> {next_level_name}"
