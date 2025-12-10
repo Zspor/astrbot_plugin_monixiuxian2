@@ -21,9 +21,10 @@ CMD_BREAKTHROUGH_INFO = "突破信息"
 CMD_USE_PILL = "服用丹药"
 CMD_SHOW_PILLS = "丹药背包"
 CMD_PILL_INFO = "丹药信息"
-CMD_SHOP = "商店"
+CMD_PILL_PAVILION = "丹阁"
+CMD_WEAPON_PAVILION = "器阁"
+CMD_TREASURE_PAVILION = "百宝阁"
 CMD_BUY = "购买"
-CMD_REFRESH_SHOP = "刷新商店"
 
 @register(
     "astrbot_plugin_xiuxian_lite",
@@ -206,26 +207,34 @@ class XiuXianPlugin(Star):
         async for r in self.pill_handler.handle_pill_info(event, pill_name):
             yield r
 
-    @filter.command(CMD_SHOP, "查看商店物品")
-    async def handle_shop(self, event: AstrMessageEvent):
+    @filter.command(CMD_PILL_PAVILION, "查看丹阁丹药")
+    async def handle_pill_pavilion(self, event: AstrMessageEvent):
         if not self._check_access(event):
             await self._send_access_denied_message(event)
             return
-        async for r in self.shop_handler.handle_shop(event):
+        async for r in self.shop_handler.handle_pill_pavilion(event):
             yield r
 
-    @filter.command(CMD_BUY, "购买商店物品")
+    @filter.command(CMD_WEAPON_PAVILION, "查看器阁武器")
+    async def handle_weapon_pavilion(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.shop_handler.handle_weapon_pavilion(event):
+            yield r
+
+    @filter.command(CMD_TREASURE_PAVILION, "查看百宝阁物品")
+    async def handle_treasure_pavilion(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.shop_handler.handle_treasure_pavilion(event):
+            yield r
+
+    @filter.command(CMD_BUY, "购买物品")
     async def handle_buy(self, event: AstrMessageEvent, item_name: str = ""):
         if not self._check_access(event):
             await self._send_access_denied_message(event)
             return
         async for r in self.shop_handler.handle_buy(event, item_name):
-            yield r
-
-    @filter.command(CMD_REFRESH_SHOP, "手动刷新商店")
-    async def handle_refresh_shop(self, event: AstrMessageEvent):
-        if not self._check_access(event):
-            await self._send_access_denied_message(event)
-            return
-        async for r in self.shop_handler.handle_refresh_shop(event):
             yield r

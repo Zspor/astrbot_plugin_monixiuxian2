@@ -1,6 +1,7 @@
 # handlers/shop_handler.py
 
 import time
+import re
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import AstrBotConfig, logger
 from ..data import DataBase
@@ -8,10 +9,6 @@ from ..core import ShopManager, EquipmentManager, PillManager
 from ..models import Player
 from ..config_manager import ConfigManager
 from .utils import player_required
-
-CMD_SHOP = "商店"
-CMD_BUY = "购买"
-CMD_REFRESH_SHOP = "刷新商店"
 
 __all__ = ["ShopHandler"]
 
@@ -31,62 +28,63 @@ class ShopHandler:
             for user_id in access_control.get("SHOP_MANAGERS", [])
         }
 
-    def _is_shop_manager(self, event: AstrMessageEvent) -> bool:
-        """检查当前用户是否拥有商店管理权限"""
-        if not self.shop_manager_ids:
-            return False
-        sender_id = str(event.get_sender_id())
-        return sender_id in self.shop_manager_ids
-
-    async def _ensure_shop_refreshed(self) -> None:
-        """确保商店已刷新"""
-        last_refresh_time, current_items = await self.db.get_shop_data("global")
-
-        # 兼容旧数据 - 补充库存信息
-        items_updated = False
+    async def _ensure_pavilion_refreshed(self, pavilion_id: str, item_getter, count: int) -> None:
+        """确保阁楼已刷新"""
+        last_refresh_time, current_items = await self.db.get_shop_data(pavilion_id)
         if current_items:
-            items_updated = self.shop_manager.ensure_items_have_stock(current_items)
+            updated = self.shop_manager.ensure_items_have_stock(current_items)
+            if updated:
+                await self.db.update_shop_data(pavilion_id, last_refresh_time, current_items)
+        refresh_hours = self.config.get("PAVILION_REFRESH_HOURS", 6)
+        if not current_items or self.shop_manager.should_refresh_shop(last_refresh_time, refresh_hours):
+            new_items = self.shop_manager.generate_pavilion_items(item_getter, count)
+            await self.db.update_shop_data(pavilion_id, int(time.time()), new_items)
 
-        # 检查是否需要刷新
-        if not current_items or self.shop_manager.should_refresh_shop(last_refresh_time):
-            # 生成新的商店物品
-            item_count = self.config.get("SHOP_ITEM_COUNT", 10)
-            new_items = self.shop_manager.generate_shop_items(item_count)
-
-            # 保存到数据库
-            current_time = int(time.time())
-            await self.db.update_shop_data("global", current_time, new_items)
-        elif items_updated:
-            await self.db.update_shop_data("global", last_refresh_time, current_items)
-
-    async def handle_shop(self, event: AstrMessageEvent):
-        """处理查看商店命令"""
-        # 确保商店已刷新
-        await self._ensure_shop_refreshed()
-
-        # 获取商店数据
-        last_refresh_time, current_items = await self.db.get_shop_data("global")
-
-        if not current_items:
-            yield event.plain_result("商店暂无物品出售，请稍后再试。")
+    async def handle_pill_pavilion(self, event: AstrMessageEvent):
+        """处理丹阁命令 - 展示丹药列表"""
+        count = self.config.get("PAVILION_PILL_COUNT", 10)
+        await self._ensure_pavilion_refreshed("pill_pavilion", self.shop_manager.get_pills_for_display, count)
+        last_refresh, items = await self.db.get_shop_data("pill_pavilion")
+        if not items:
+            yield event.plain_result("丹阁暂无丹药出售。")
             return
+        refresh_hours = self.config.get("PAVILION_REFRESH_HOURS", 6)
+        display = self.shop_manager.format_pavilion_display("丹阁", items, refresh_hours, last_refresh)
+        yield event.plain_result(display)
 
-        # 计算下次刷新时间
-        refresh_hours = self.config.get("SHOP_REFRESH_HOURS", 6)
-        next_refresh_time = last_refresh_time + (refresh_hours * 3600)
-        current_time = int(time.time())
-        time_until_refresh = next_refresh_time - current_time
+    async def handle_weapon_pavilion(self, event: AstrMessageEvent):
+        """处理器阁命令 - 展示武器列表"""
+        count = self.config.get("PAVILION_WEAPON_COUNT", 10)
+        await self._ensure_pavilion_refreshed("weapon_pavilion", self.shop_manager.get_weapons_for_display, count)
+        last_refresh, items = await self.db.get_shop_data("weapon_pavilion")
+        if not items:
+            yield event.plain_result("器阁暂无武器出售。")
+            return
+        refresh_hours = self.config.get("PAVILION_REFRESH_HOURS", 6)
+        display = self.shop_manager.format_pavilion_display("器阁", items, refresh_hours, last_refresh)
+        yield event.plain_result(display)
 
-        hours = time_until_refresh // 3600
-        minutes = (time_until_refresh % 3600) // 60
+    async def handle_treasure_pavilion(self, event: AstrMessageEvent):
+        """处理百宝阁命令 - 展示所有物品"""
+        count = self.config.get("PAVILION_TREASURE_COUNT", 15)
+        await self._ensure_pavilion_refreshed("treasure_pavilion", self.shop_manager.get_all_items_for_display, count)
+        last_refresh, items = await self.db.get_shop_data("treasure_pavilion")
+        if not items:
+            yield event.plain_result("百宝阁暂无物品出售。")
+            return
+        refresh_hours = self.config.get("PAVILION_REFRESH_HOURS", 6)
+        display = self.shop_manager.format_pavilion_display("百宝阁", items, refresh_hours, last_refresh)
+        yield event.plain_result(display)
 
-        # 格式化商店展示
-        shop_display = self.shop_manager.format_shop_display(current_items)
-
-        if refresh_hours > 0:
-            shop_display += f"\n下次刷新时间: {hours}小时{minutes}分钟后"
-
-        yield event.plain_result(shop_display)
+    async def _find_item_in_pavilions(self, item_name: str):
+        """在所有阁楼中查找物品"""
+        for pavilion_id in ["pill_pavilion", "weapon_pavilion", "treasure_pavilion"]:
+            _, items = await self.db.get_shop_data(pavilion_id)
+            if items:
+                for item in items:
+                    if item['name'] == item_name and item.get('stock', 0) > 0:
+                        return pavilion_id, item
+        return None, None
 
     @player_required
     async def handle_buy(self, player: Player, event: AstrMessageEvent, item_name: str = ""):
@@ -95,51 +93,55 @@ class ShopHandler:
             yield event.plain_result("请指定要购买的物品名称，例如：购买 青铜剑")
             return
 
-        item_input = item_name.strip()
-
-        # 支持“物品名 数量”格式，默认数量为1
+        # 兼容全角空格/数字与“x10”写法
+        normalized = item_name.strip().replace("　", " ")
+        normalized = normalized.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
         quantity = 1
-        parts = item_input.rsplit(" ", 1)
-        if len(parts) == 2 and parts[1].isdigit():
-            quantity = max(1, int(parts[1]))
-            item_name = parts[0].strip()
-            if not item_name:
-                item_name = parts[0]
-        else:
-            item_name = item_input
+        item_part = normalized
 
-        # 确保商店已刷新
-        await self._ensure_shop_refreshed()
+        def parse_qty(text: str):
+            text = re.sub(r"\s+", " ", text)
+            m = re.match(r"^(.*?)(?:\s+(\d+)|[xX＊*]\s*(\d+))$", text)
+            if m:
+                part = m.group(1).strip()
+                qty_str = m.group(2) or m.group(3)
+                return part, max(1, int(qty_str))
+            return text.strip(), 1
 
-        # 获取商店数据
-        last_refresh_time, current_items = await self.db.get_shop_data("global")
+        item_part, quantity = parse_qty(normalized)
 
-        target_item = next((item for item in current_items if item['name'] == item_name), None)
+        # 若指令解析只传入物品名（忽略数量），尝试从原始消息再解析一次
+        if quantity == 1:
+            try:
+                raw_msg = event.get_message_str().strip()
+                if raw_msg.startswith("购买"):
+                    raw_msg = raw_msg[len("购买"):].strip()
+                raw_msg = raw_msg.replace("　", " ")
+                raw_msg = raw_msg.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+                item_part, quantity = parse_qty(raw_msg)
+            except Exception:
+                pass
+
+        item_name = item_part
+
+        pavilion_id, target_item = await self._find_item_in_pavilions(item_name)
         if not target_item:
-            yield event.plain_result(f"商店中没有找到【{item_name}】，请检查物品名称。")
+            yield event.plain_result(f"没有找到【{item_name}】，请检查物品名称或等待刷新。")
             return
 
         stock = target_item.get('stock', 0)
-        if stock <= 0:
-            yield event.plain_result(f"【{item_name}】已售罄，请等待商店刷新。")
-            return
-
         if quantity > stock:
-            yield event.plain_result(f"【{item_name}】库存不足，最多可购买 {stock} 件。")
+            yield event.plain_result(f"【{item_name}】库存不足，当前库存: {stock}。")
             return
 
         price = target_item['price']
         total_price = price * quantity
         if player.gold < total_price:
             yield event.plain_result(
-                f"灵石不足！\n"
-                f"【{target_item['name']}】价格: {price} 灵石\n"
-                f"购买数量: {quantity}\n"
-                f"需要灵石: {total_price}\n"
-                f"你的灵石: {player.gold}"
+                f"灵石不足！\n【{target_item['name']}】价格: {price} 灵石\n"
+                f"购买数量: {quantity}\n需要灵石: {total_price}\n你的灵石: {player.gold}"
             )
             return
-
 
         item_type = target_item['type']
         result_lines = []
@@ -147,80 +149,42 @@ class ShopHandler:
         parsed_item = None
         if item_type in ['weapon', 'armor', 'main_technique', 'technique']:
             if quantity > 1:
-                yield event.plain_result("装备类物品一次只能购买1件，请重新输入数量为1。")
+                yield event.plain_result("装备类物品一次只能购买1件。")
                 return
             parsed_item = self.equipment_manager.parse_item_from_name(
-                target_item['name'],
-                self.config_manager.items_data,
-                self.config_manager.weapons_data
+                target_item['name'], self.config_manager.items_data, self.config_manager.weapons_data
             )
             if not parsed_item:
                 yield event.plain_result("装备信息不存在，无法完成购买。")
                 return
 
-        # 预扣库存，避免并发情况下的超卖
-        try:
-            reserved, _, remaining_stock = await self.db.decrement_shop_item_stock("global", target_item['name'], quantity)
-        except Exception as e:
-            logger.error(f"扣减库存失败: {e}")
-            reserved = False
-            remaining_stock = 0
-
+        reserved, _, remaining = await self.db.decrement_shop_item_stock(pavilion_id, item_name, quantity)
         if not reserved:
-            yield event.plain_result(f"【{item_name}】已售罄，请等待商店刷新。")
+            yield event.plain_result(f"【{item_name}】已售罄，请等待刷新。")
             return
 
         try:
             if item_type in ['weapon', 'armor', 'main_technique', 'technique']:
                 success, message = await self.equipment_manager.equip_item(player, parsed_item)
                 if not success:
-                    await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
+                    await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
                     yield event.plain_result(message)
                     return
                 result_lines.append(message)
             elif item_type in ['pill', 'exp_pill', 'utility_pill']:
-                pill_name = target_item['name']
-                await self.pill_manager.add_pill_to_inventory(player, pill_name, count=quantity)
-                result_lines.append(f"成功购买【{pill_name}】x{quantity}。")
-                result_lines.append("丹药已添加到背包。")
+                await self.pill_manager.add_pill_to_inventory(player, target_item['name'], count=quantity)
+                result_lines.append(f"成功购买【{target_item['name']}】x{quantity}，已添加到背包。")
             else:
-                await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
+                await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
                 yield event.plain_result(f"未知的物品类型：{item_type}")
                 return
 
-            # 扣除灵石并保存
             player.gold -= total_price
             await self.db.update_player(player)
-
-            result_lines.append(f"花费灵石: {total_price}")
-            result_lines.append(f"剩余灵石: {player.gold}")
-            if remaining_stock > 0:
-                result_lines.append(f"剩余库存: {remaining_stock}")
-            else:
-                result_lines.append("该物品已售罄！")
-
+            result_lines.append(f"花费灵石: {total_price}，剩余: {player.gold}")
+            result_lines.append(f"剩余库存: {remaining}" if remaining > 0 else "该物品已售罄！")
             yield event.plain_result("\n".join(result_lines))
         except Exception as e:
-            await self.db.increment_shop_item_stock("global", target_item['name'], quantity)
-            logger.error(f"购买流程异常，已回滚库存: {e}")
+            await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
+            logger.error(f"购买异常: {e}")
             raise
-
-    async def handle_refresh_shop(self, event: AstrMessageEvent):
-        """处理手动刷新商店命令（管理员功能）"""
-        if not self.shop_manager_ids:
-            yield event.plain_result("未配置商店管理员，无法手动刷新商店。")
-            return
-
-        if not self._is_shop_manager(event):
-            yield event.plain_result("你无权刷新商店。")
-            return
-
-        # 生成新的商店物品
-        item_count = self.config.get("SHOP_ITEM_COUNT", 10)
-        new_items = self.shop_manager.generate_shop_items(item_count)
-
-        # 保存到数据库
-        current_time = int(time.time())
-        await self.db.update_shop_data("global", current_time, new_items)
-
-        yield event.plain_result("商店已手动刷新！")

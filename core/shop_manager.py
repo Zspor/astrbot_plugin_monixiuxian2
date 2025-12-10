@@ -224,82 +224,123 @@ class ShopManager:
 
         return shop_items
 
-    def should_refresh_shop(self, last_refresh_time: int) -> bool:
-        """检查商店是否需要刷新
-
-        Args:
-            last_refresh_time: 上次刷新时间（Unix时间戳）
-
-        Returns:
-            是否需要刷新
-        """
-        refresh_hours = self.config.get("SHOP_REFRESH_HOURS", 6)
+    def should_refresh_shop(self, last_refresh_time: int, refresh_hours: int = None) -> bool:
+        """检查是否需要刷新"""
+        if refresh_hours is None:
+            refresh_hours = self.config.get("SHOP_REFRESH_HOURS", 6)
         if refresh_hours <= 0:
             return False
+        return (int(time.time()) - last_refresh_time) >= (refresh_hours * 3600)
 
-        current_time = int(time.time())
-        time_diff = current_time - last_refresh_time
-        refresh_interval = refresh_hours * 3600  # 转换为秒
+    def generate_pavilion_items(self, item_getter, count: int) -> List[Dict]:
+        """生成阁楼物品列表（带库存和折扣）"""
+        base_items = item_getter(count * 2)  # 获取更多以便随机选择
+        selected = self._weighted_random_choice(
+            [{'weight': i.get('data', {}).get('shop_weight', 100), **i} for i in base_items], count
+        )
+        discount_min = self.config.get("SHOP_DISCOUNT_MIN", 0.8)
+        discount_max = self.config.get("SHOP_DISCOUNT_MAX", 1.2)
+        result = []
+        for item in selected:
+            discount = random.uniform(discount_min, discount_max)
+            stock = self._calculate_stock(item.get('weight', 100))
+            result.append({
+                'name': item['name'], 'type': item['type'], 'rank': item['rank'],
+                'original_price': item['price'], 'discount': discount,
+                'price': int(item['price'] * discount), 'stock': stock, 'data': item.get('data', {})
+            })
+        return result
 
-        return time_diff >= refresh_interval
+    def get_pills_for_display(self, count: int) -> List[Dict]:
+        """获取丹药列表用于丹阁展示"""
+        all_pills = []
+        for pill in self.config_manager.pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_pills.append({'name': pill['name'], 'type': 'pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        for pill in self.config_manager.exp_pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_pills.append({'name': pill['name'], 'type': 'exp_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        for pill in self.config_manager.utility_pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_pills.append({'name': pill['name'], 'type': 'utility_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        return all_pills
 
-    def format_shop_display(self, shop_items: List[Dict]) -> str:
-        """格式化商店展示信息
+    def get_weapons_for_display(self, count: int) -> List[Dict]:
+        """获取武器列表用于器阁展示"""
+        all_weapons = []
+        for weapon in self.config_manager.weapons_data.values():
+            if weapon.get('price', 0) > 0:
+                all_weapons.append({'name': weapon['name'], 'type': 'weapon', 'price': weapon['price'], 'rank': weapon.get('rank', '凡品'), 'data': weapon})
+        return all_weapons
 
-        Args:
-            shop_items: 商店物品列表
+    def get_all_items_for_display(self, count: int) -> List[Dict]:
+        """获取所有物品用于百宝阁展示"""
+        all_items = []
+        for weapon in self.config_manager.weapons_data.values():
+            if weapon.get('price', 0) > 0:
+                all_items.append({'name': weapon['name'], 'type': 'weapon', 'price': weapon['price'], 'rank': weapon.get('rank', '凡品'), 'data': weapon})
+        for item in self.config_manager.items_data.values():
+            if item.get('price', 0) > 0:
+                all_items.append({'name': item['name'], 'type': item['type'], 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item})
+        for pill in self.config_manager.pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_items.append({'name': pill['name'], 'type': 'pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        for pill in self.config_manager.exp_pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_items.append({'name': pill['name'], 'type': 'exp_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        for pill in self.config_manager.utility_pills_data.values():
+            if pill.get('price', 0) > 0:
+                all_items.append({'name': pill['name'], 'type': 'utility_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
+        return all_items
 
-        Returns:
-            格式化的商店展示文本
-        """
-        if not shop_items:
-            return "商店暂无物品出售"
+    def find_item_by_name(self, name: str) -> Optional[Dict]:
+        """根据名称查找物品"""
+        for weapon in self.config_manager.weapons_data.values():
+            if weapon['name'] == name and weapon.get('price', 0) > 0:
+                return {'name': weapon['name'], 'type': 'weapon', 'price': weapon['price'], 'rank': weapon.get('rank', '凡品'), 'data': weapon}
+        for item in self.config_manager.items_data.values():
+            if item['name'] == name and item.get('price', 0) > 0:
+                return {'name': item['name'], 'type': item['type'], 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item}
+        for pill in self.config_manager.pills_data.values():
+            if pill['name'] == name and pill.get('price', 0) > 0:
+                return {'name': pill['name'], 'type': 'pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill}
+        for pill in self.config_manager.exp_pills_data.values():
+            if pill['name'] == name and pill.get('price', 0) > 0:
+                return {'name': pill['name'], 'type': 'exp_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill}
+        for pill in self.config_manager.utility_pills_data.values():
+            if pill['name'] == name and pill.get('price', 0) > 0:
+                return {'name': pill['name'], 'type': 'utility_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill}
+        return None
 
-        lines = ["=== 修仙商店 ===\n"]
-        display_index = 1
+    def format_pavilion_display(self, pavilion_name: str, items: List[Dict], refresh_hours: int = 6, last_refresh: int = 0) -> str:
+        """格式化阁楼展示信息"""
+        if not items:
+            return f"{pavilion_name}暂无物品出售"
 
-        for item in shop_items:
+        type_label_map = {
+            'weapon': '武器', 'armor': '防具', 'main_technique': '心法', 'technique': '功法',
+            'pill': '破境丹', 'exp_pill': '修为丹', 'utility_pill': '功能丹'
+        }
+
+        lines = [f"=== {pavilion_name} ===\n"]
+        for i, item in enumerate(items, 1):
             stock = item.get('stock', 0)
-            if stock is None or stock <= 0:
+            if stock <= 0:
                 continue
-
+            type_label = type_label_map.get(item['type'], '物品')
             discount_text = ""
-            if item['discount'] < 1.0:
-                discount_percent = int((1.0 - item['discount']) * 100)
-                discount_text = f" [{discount_percent}%折]"
-            elif item['discount'] > 1.0:
-                price_increase = int((item['discount'] - 1.0) * 100)
-                discount_text = f" [+{price_increase}%]"
+            if item.get('discount', 1.0) < 1.0:
+                discount_text = f" [{int((1.0 - item['discount']) * 100)}%折]"
+            elif item.get('discount', 1.0) > 1.0:
+                discount_text = f" [+{int((item['discount'] - 1.0) * 100)}%]"
+            stock_text = f"库存紧张:{stock}" if stock <= 3 else f"库存:{stock}"
+            lines.append(f"{i}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n   价格: {item['price']} 灵石 {stock_text}\n")
 
-            # 物品类型标签
-            type_label = {
-                'weapon': '武器',
-                'armor': '防具',
-                'main_technique': '心法',
-                'technique': '功法',
-                'pill': '破境丹',
-                'exp_pill': '修为丹',
-                'utility_pill': '功能丹',
-                '丹药': '丹药'
-            }.get(item['type'], '物品')
-
-            # 库存显示
-            stock_text = f" 库存紧张:{stock}" if stock <= 3 else f" 库存:{stock}"
-
-            line = f"{display_index}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n"
-            line += f"   价格: {item['price']} 灵石{stock_text}"
-
-            if item['original_price'] != item['price']:
-                line += f" (原价: {item['original_price']})"
-
-            lines.append(line + "\n")
-            display_index += 1
-
-        if display_index == 1:
-            lines.append("当前所有商品均已售罄，请等待下一次刷新。\n")
-        else:
-            lines.append(f"\n提示: 使用 '购买 [物品名]' 购买物品")
-
+        if refresh_hours > 0 and last_refresh:
+            remaining = (last_refresh + refresh_hours * 3600) - int(time.time())
+            if remaining > 0:
+                lines.append(f"\n下次刷新: {remaining // 3600}小时{(remaining % 3600) // 60}分钟后")
+        lines.append(f"\n提示: 使用 '购买 [物品名]' 购买物品")
         return "".join(lines)
 
     def get_item_details(self, item_data: Dict) -> str:

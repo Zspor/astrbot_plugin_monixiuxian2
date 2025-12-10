@@ -51,35 +51,47 @@
         "default": [0.01, 0.1],
         "hint": "突破失败时的死亡概率范围。第一个值为最小概率（1%），第二个值为最大概率（10%）。每次突破失败会在此范围内随机一个死亡概率。"
       },
-      "SHOP_REFRESH_HOURS": {
-        "description": "商店刷新时间（小时）",
+      "PAVILION_REFRESH_HOURS": {
+        "description": "阁楼刷新时间（小时）",
         "type": "int",
         "default": 6,
-        "hint": "商店自动刷新的间隔时间（小时）。设置为0则不自动刷新。"
+        "hint": "丹阁、器阁、百宝阁自动刷新的间隔时间（小时）。设置为0则不自动刷新。"
       },
-      "SHOP_ITEM_COUNT": {
-        "description": "商店展示物品数量",
+      "PAVILION_PILL_COUNT": {
+        "description": "丹阁展示数量",
         "type": "int",
         "default": 10,
-        "hint": "商店每次刷新展示的物品数量。"
+        "hint": "丹阁展示的丹药数量。"
+      },
+      "PAVILION_WEAPON_COUNT": {
+        "description": "器阁展示数量",
+        "type": "int",
+        "default": 10,
+        "hint": "器阁展示的武器数量。"
+      },
+      "PAVILION_TREASURE_COUNT": {
+        "description": "百宝阁展示数量",
+        "type": "int",
+        "default": 15,
+        "hint": "百宝阁展示的物品数量。"
       },
       "SHOP_DISCOUNT_MIN": {
-        "description": "商店折扣最小值",
+        "description": "折扣最小值",
         "type": "float",
         "default": 0.8,
-        "hint": "商店物品折扣的最小值（0.8表示8折，即80%的价格）。"
+        "hint": "物品折扣的最小值（0.8表示8折）。"
       },
       "SHOP_DISCOUNT_MAX": {
-        "description": "商店折扣最大值",
+        "description": "折扣最大值",
         "type": "float",
         "default": 1.2,
-        "hint": "商店物品折扣的最大值（1.2表示1.2倍价格）。设置为1.0则不打折。"
+        "hint": "物品折扣的最大值（1.2表示1.2倍价格）。"
       },
       "SHOP_STOCK_DIVISOR": {
-        "description": "商店库存计算基数",
+        "description": "库存计算基数",
         "type": "int",
         "default": 100,
-        "hint": "库存=物品权重/基数。基数越大，库存越少。例如：权重1000的物品，基数100时库存为10；权重5的物品，库存为1（最少为1）。"
+        "hint": "库存=物品权重/基数。基数越大，库存越少。"
       }
     }
   },
