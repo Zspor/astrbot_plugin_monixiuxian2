@@ -118,7 +118,7 @@ class PlayerHandler:
 
         # 获取装备加成后的属性
         from ..core import EquipmentManager
-        equipment_manager = EquipmentManager(self.db)
+        equipment_manager = EquipmentManager(self.db, self.config_manager)
         equipped_items = equipment_manager.get_equipped_items(
             player,
             self.config_manager.items_data,
@@ -221,7 +221,7 @@ class PlayerHandler:
         technique_bonus = 0.0
         if player.main_technique:
             from ..core import EquipmentManager
-            equipment_manager = EquipmentManager(self.db)
+            equipment_manager = EquipmentManager(self.db, self.config_manager)
             equipped_items = equipment_manager.get_equipped_items(
                 player,
                 self.config_manager.items_data,

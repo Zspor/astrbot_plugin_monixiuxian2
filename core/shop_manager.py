@@ -281,7 +281,9 @@ class ShopManager:
                 all_items.append({'name': weapon['name'], 'type': 'weapon', 'price': weapon['price'], 'rank': weapon.get('rank', '凡品'), 'data': weapon})
         for item in self.config_manager.items_data.values():
             if item.get('price', 0) > 0:
-                all_items.append({'name': item['name'], 'type': item['type'], 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item})
+                # 映射旧格式类型到新格式
+                item_type = self._map_legacy_item_type(item)
+                all_items.append({'name': item['name'], 'type': item_type, 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item})
         for pill in self.config_manager.pills_data.values():
             if pill.get('price', 0) > 0:
                 all_items.append({'name': pill['name'], 'type': 'pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
@@ -293,6 +295,44 @@ class ShopManager:
                 all_items.append({'name': pill['name'], 'type': 'utility_pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill})
         return all_items
 
+    def _map_legacy_item_type(self, item: dict) -> str:
+        """将旧格式物品类型映射到新格式
+
+        Args:
+            item: 物品配置字典
+
+        Returns:
+            映射后的类型字符串
+        """
+        original_type = item.get('type', '')
+        subtype = item.get('subtype', '')
+
+        # 法器类型映射
+        if original_type == '法器':
+            if subtype == '武器':
+                return 'weapon'
+            elif subtype == '防具':
+                return 'armor'
+            elif subtype == '饰品':
+                return 'accessory'
+            else:
+                return 'weapon'  # 默认为武器
+
+        # 功法类型映射
+        if original_type == '功法':
+            return 'technique'
+
+        # 丹药类型映射（旧系统丹药）
+        if original_type == '丹药':
+            return 'legacy_pill'
+
+        # 材料类型映射
+        if original_type == '材料':
+            return 'material'
+
+        # 其他类型保持不变
+        return original_type
+
     def find_item_by_name(self, name: str) -> Optional[Dict]:
         """根据名称查找物品"""
         for weapon in self.config_manager.weapons_data.values():
@@ -300,7 +340,9 @@ class ShopManager:
                 return {'name': weapon['name'], 'type': 'weapon', 'price': weapon['price'], 'rank': weapon.get('rank', '凡品'), 'data': weapon}
         for item in self.config_manager.items_data.values():
             if item['name'] == name and item.get('price', 0) > 0:
-                return {'name': item['name'], 'type': item['type'], 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item}
+                # 映射旧格式类型到新格式
+                item_type = self._map_legacy_item_type(item)
+                return {'name': item['name'], 'type': item_type, 'price': item['price'], 'rank': item.get('rank', '凡品'), 'data': item}
         for pill in self.config_manager.pills_data.values():
             if pill['name'] == name and pill.get('price', 0) > 0:
                 return {'name': pill['name'], 'type': 'pill', 'price': pill['price'], 'rank': pill.get('rank', '凡品'), 'data': pill}
@@ -319,7 +361,8 @@ class ShopManager:
 
         type_label_map = {
             'weapon': '武器', 'armor': '防具', 'main_technique': '心法', 'technique': '功法',
-            'pill': '破境丹', 'exp_pill': '修为丹', 'utility_pill': '功能丹'
+            'pill': '破境丹', 'exp_pill': '修为丹', 'utility_pill': '功能丹',
+            'legacy_pill': '丹药', 'material': '材料', 'accessory': '饰品'
         }
 
         lines = [f"=== {pavilion_name} ===\n"]

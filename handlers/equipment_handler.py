@@ -19,7 +19,7 @@ class EquipmentHandler:
     def __init__(self, db: DataBase, config_manager: ConfigManager):
         self.db = db
         self.config_manager = config_manager
-        self.equipment_manager = EquipmentManager(db)
+        self.equipment_manager = EquipmentManager(db, config_manager)
         self.pill_manager = PillManager(db, config_manager)
 
     @player_required

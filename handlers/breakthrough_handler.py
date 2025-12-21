@@ -151,10 +151,14 @@ class BreakthroughHandler:
             target_level = pill_data.get("target_level_index", -1)
             if target_level != player.level_index + 1:
                 current_level = level_data[player.level_index]["level_name"]
+                # 获取丹药目标境界名称
+                target_level_name = f"境界{target_level}"
+                if 0 <= target_level < len(level_data):
+                    target_level_name = level_data[target_level]["level_name"]
                 yield event.plain_result(
                     f"❌ {pill_name} 不适用于当前突破\n"
                     f"当前境界：{current_level}\n"
-                    f"此丹药用于突破到境界索引：{target_level}"
+                    f"此丹药用于突破到：【{target_level_name}】"
                 )
                 return
 

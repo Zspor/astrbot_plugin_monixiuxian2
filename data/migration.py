@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 9  # 版本号提升 - 添加体修气血系统
+LATEST_DB_VERSION = 10  # 版本号提升 - 清理废弃字段
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -195,6 +195,89 @@ async def _migrate_to_v9(conn: aiosqlite.Connection, config_manager: ConfigManag
     await conn.execute("ALTER TABLE players ADD COLUMN max_blood_qi INTEGER NOT NULL DEFAULT 0")
 
     logger.info("v9迁移完成：体修气血系统")
+
+@migration(10)
+async def _migrate_to_v10(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v10 - 清理废弃字段（equipment_inventory等）"""
+    logger.info("开始迁移到v10：清理废弃字段")
+
+    # 获取当前表结构
+    async with conn.execute("PRAGMA table_info(players)") as cursor:
+        columns = {row[1] for row in await cursor.fetchall()}
+
+    # 定义需要保留的字段（与 Player 模型一致）
+    valid_columns = {
+        'user_id', 'level_index', 'spiritual_root', 'cultivation_type', 'lifespan',
+        'experience', 'gold', 'state', 'cultivation_start_time', 'last_check_in_date',
+        'spiritual_qi', 'max_spiritual_qi', 'blood_qi', 'max_blood_qi',
+        'magic_damage', 'physical_damage', 'magic_defense', 'physical_defense', 'mental_power',
+        'weapon', 'armor', 'main_technique', 'techniques',
+        'active_pill_effects', 'permanent_pill_gains', 'has_resurrection_pill', 'has_debuff_shield', 'pills_inventory'
+    }
+
+    # 找出需要删除的废弃字段
+    deprecated_columns = columns - valid_columns
+    if deprecated_columns:
+        logger.info(f"发现废弃字段: {deprecated_columns}，将进行清理...")
+
+        # 使用正确的表重建方式（保留约束）
+        columns_to_keep = columns & valid_columns
+        columns_str = ', '.join(columns_to_keep)
+
+        # 1. 创建新表（带完整约束）
+        await conn.execute("""
+            CREATE TABLE players_new (
+                user_id TEXT PRIMARY KEY,
+                level_index INTEGER NOT NULL DEFAULT 0,
+                spiritual_root TEXT NOT NULL DEFAULT '未知',
+                cultivation_type TEXT NOT NULL DEFAULT '灵修',
+                lifespan INTEGER NOT NULL DEFAULT 100,
+                experience INTEGER NOT NULL DEFAULT 0,
+                gold INTEGER NOT NULL DEFAULT 0,
+                state TEXT NOT NULL DEFAULT '空闲',
+                cultivation_start_time INTEGER NOT NULL DEFAULT 0,
+                last_check_in_date TEXT NOT NULL DEFAULT '',
+                spiritual_qi INTEGER NOT NULL DEFAULT 100,
+                max_spiritual_qi INTEGER NOT NULL DEFAULT 1000,
+                blood_qi INTEGER NOT NULL DEFAULT 0,
+                max_blood_qi INTEGER NOT NULL DEFAULT 0,
+                magic_damage INTEGER NOT NULL DEFAULT 10,
+                physical_damage INTEGER NOT NULL DEFAULT 10,
+                magic_defense INTEGER NOT NULL DEFAULT 5,
+                physical_defense INTEGER NOT NULL DEFAULT 5,
+                mental_power INTEGER NOT NULL DEFAULT 100,
+                weapon TEXT NOT NULL DEFAULT '',
+                armor TEXT NOT NULL DEFAULT '',
+                main_technique TEXT NOT NULL DEFAULT '',
+                techniques TEXT NOT NULL DEFAULT '[]',
+                active_pill_effects TEXT NOT NULL DEFAULT '[]',
+                permanent_pill_gains TEXT NOT NULL DEFAULT '{}',
+                has_resurrection_pill INTEGER NOT NULL DEFAULT 0,
+                has_debuff_shield INTEGER NOT NULL DEFAULT 0,
+                pills_inventory TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+
+        # 2. 复制数据
+        await conn.execute(f"""
+            INSERT INTO players_new ({columns_str})
+            SELECT {columns_str} FROM players
+        """)
+
+        # 3. 删除旧表
+        await conn.execute("DROP TABLE players")
+
+        # 4. 重命名新表
+        await conn.execute("ALTER TABLE players_new RENAME TO players")
+
+        # 5. 重建索引
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_player_level ON players(level_index)")
+
+        logger.info(f"已清理废弃字段: {deprecated_columns}")
+    else:
+        logger.info("没有发现废弃字段，跳过清理")
+
+    logger.info("v10迁移完成：清理废弃字段")
 
 
 async def _create_all_tables_v2(conn: aiosqlite.Connection):

@@ -121,9 +121,13 @@ class PillManager:
         # 检查境界需求
         required_level = pill_data.get("required_level_index", 0)
         if player.level_index < required_level:
+            # 根据玩家修炼类型获取对应境界名称
+            level_data = self.config_manager.get_level_data(player.cultivation_type)
+            level_name = f"境界{required_level}"
+            if 0 <= required_level < len(level_data):
+                level_name = level_data[required_level]["level_name"]
             return False, (
-                f"境界不足！使用【{pill_name}】需要达到"
-                f"【{self.config_manager.level_data[required_level]['level_name']}】"
+                f"境界不足！使用【{pill_name}】需要达到【{level_name}】"
             )
 
         # 根据丹药类型处理

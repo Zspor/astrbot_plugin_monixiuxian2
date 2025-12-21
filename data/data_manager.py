@@ -2,9 +2,13 @@
 
 import aiosqlite
 import json
+from dataclasses import fields
 from pathlib import Path
 from typing import Tuple, List
 from ..models import Player
+
+# 获取 Player 模型的所有字段名（用于过滤数据库中的多余字段，作为迁移未完成时的兼容）
+PLAYER_FIELDS = {f.name for f in fields(Player)}
 
 class DataBase:
     """数据库管理类，提供基础玩家操作"""
@@ -77,7 +81,9 @@ class DataBase:
         ) as cursor:
             row = await cursor.fetchone()
             if row:
-                return Player(**dict(row))
+                # 过滤掉 Player 模型中不存在的字段（兼容旧数据库/迁移未完成的情况）
+                filtered_data = {k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}
+                return Player(**filtered_data)
             return None
 
     async def update_player(self, player: Player):
@@ -159,7 +165,8 @@ class DataBase:
         """获取所有玩家"""
         async with self.conn.execute("SELECT * FROM players") as cursor:
             rows = await cursor.fetchall()
-            return [Player(**dict(row)) for row in rows]
+            # 过滤掉 Player 模型中不存在的字段（兼容旧数据库/迁移未完成的情况）
+            return [Player(**{k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}) for row in rows]
 
     # ========== 商店数据操作 ==========
 

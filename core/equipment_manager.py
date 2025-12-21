@@ -1,14 +1,18 @@
 # core/equipment_manager.py
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, TYPE_CHECKING
 from ..models import Player, Item
 from ..data import DataBase
+
+if TYPE_CHECKING:
+    from ..config_manager import ConfigManager
 
 class EquipmentManager:
     """装备管理器 - 处理装备的穿戴、卸下和属性计算"""
 
-    def __init__(self, db: DataBase):
+    def __init__(self, db: DataBase, config_manager: "ConfigManager" = None):
         self.db = db
+        self.config_manager = config_manager
 
     def parse_item_from_name(self, item_name: str, items_data: dict, weapons_data: dict = None) -> Optional[Item]:
         """从物品名称解析为Item对象
@@ -34,19 +38,54 @@ class EquipmentManager:
         if not item_config:
             return None
 
+        # 处理新旧格式兼容性
+        item_type = item_config.get("type", "")
+        physical_damage = item_config.get("physical_damage", 0)
+        physical_defense = item_config.get("physical_defense", 0)
+        magic_damage = item_config.get("magic_damage", 0)
+        magic_defense = item_config.get("magic_defense", 0)
+        mental_power = item_config.get("mental_power", 0)
+
+        # 旧格式兼容：处理 items.json 中的法器（equip_effects 格式）
+        if "equip_effects" in item_config:
+            equip_effects = item_config["equip_effects"]
+            # 旧格式 attack -> physical_damage
+            if "attack" in equip_effects:
+                physical_damage = equip_effects["attack"]
+            # 旧格式 defense -> physical_defense
+            if "defense" in equip_effects:
+                physical_defense = equip_effects["defense"]
+            # 旧格式 max_hp 可用于体修的 blood_qi 加成
+
+        # 旧格式兼容：处理类型映射
+        # "法器" + subtype="武器" -> "weapon"
+        # "法器" + subtype="防具" -> "armor"
+        # "法器" + subtype="饰品" -> "accessory" (暂不支持装备)
+        if item_type == "法器":
+            subtype = item_config.get("subtype", "")
+            if subtype == "武器":
+                item_type = "weapon"
+            elif subtype == "防具":
+                item_type = "armor"
+            elif subtype == "饰品":
+                item_type = "accessory"
+        elif item_type == "功法":
+            # 旧格式功法 -> technique
+            item_type = "technique"
+
         return Item(
             item_id=item_config.get("id", item_name),
             name=item_name,
-            item_type=item_config.get("type", ""),
+            item_type=item_type,
             description=item_config.get("description", ""),
             rank=item_config.get("rank", ""),
             required_level_index=item_config.get("required_level_index", 0),
             weapon_category=item_config.get("weapon_category", ""),
-            magic_damage=item_config.get("magic_damage", 0),
-            physical_damage=item_config.get("physical_damage", 0),
-            magic_defense=item_config.get("magic_defense", 0),
-            physical_defense=item_config.get("physical_defense", 0),
-            mental_power=item_config.get("mental_power", 0),
+            magic_damage=magic_damage,
+            physical_damage=physical_damage,
+            magic_defense=magic_defense,
+            physical_defense=physical_defense,
+            mental_power=mental_power,
             exp_multiplier=item_config.get("exp_multiplier", 0.0),
             spiritual_qi=item_config.get("spiritual_qi", 0),
             blood_qi=item_config.get("blood_qi", 0)
@@ -103,8 +142,31 @@ class EquipmentManager:
             (是否满足, 提示消息)
         """
         if player.level_index < item.required_level_index:
-            return False, f"境界不足！装备【{item.name}】（{item.rank}）需要达到境界索引 {item.required_level_index} 以上"
+            # 获取需求境界名称
+            required_level_name = self._format_required_level(item.required_level_index)
+            return False, f"境界不足！装备【{item.name}】（{item.rank}）需要达到【{required_level_name}】以上"
         return True, ""
+
+    def _format_required_level(self, level_index: int) -> str:
+        """格式化需求境界名称（同时显示灵修/体修）"""
+        if not self.config_manager:
+            return f"境界{level_index}"
+
+        names = []
+        # 灵修境界名称
+        if 0 <= level_index < len(self.config_manager.level_data):
+            name = self.config_manager.level_data[level_index].get("level_name", "")
+            if name:
+                names.append(name)
+        # 体修境界名称
+        if 0 <= level_index < len(self.config_manager.body_level_data):
+            name = self.config_manager.body_level_data[level_index].get("level_name", "")
+            if name and name not in names:
+                names.append(name)
+
+        if not names:
+            return f"境界{level_index}"
+        return " / ".join(names)
 
     async def equip_item(self, player: Player, item: Item) -> tuple[bool, str]:
         """装备物品
