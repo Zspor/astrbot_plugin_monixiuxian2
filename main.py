@@ -30,7 +30,7 @@ CMD_BUY = "购买"
     "astrbot_plugin_xiuxian_lite",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏",
-    "1.0.1dev",
+    "1.0.2dev",
     "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
