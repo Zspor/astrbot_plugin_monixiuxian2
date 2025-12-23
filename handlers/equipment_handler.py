@@ -2,7 +2,7 @@
 
 from astrbot.api.event import AstrMessageEvent
 from ..data import DataBase
-from ..core import EquipmentManager, PillManager
+from ..core import EquipmentManager, PillManager, StorageRingManager
 from ..config_manager import ConfigManager
 from ..models import Player
 from .utils import player_required
@@ -19,7 +19,8 @@ class EquipmentHandler:
     def __init__(self, db: DataBase, config_manager: ConfigManager):
         self.db = db
         self.config_manager = config_manager
-        self.equipment_manager = EquipmentManager(db, config_manager)
+        self.storage_ring_manager = StorageRingManager(db, config_manager)
+        self.equipment_manager = EquipmentManager(db, config_manager, self.storage_ring_manager)
         self.pill_manager = PillManager(db, config_manager)
 
     @player_required

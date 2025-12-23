@@ -6,6 +6,7 @@ from .equipment_handler import EquipmentHandler
 from .breakthrough_handler import BreakthroughHandler
 from .pill_handler import PillHandler
 from .shop_handler import ShopHandler
+from .storage_ring_handler import StorageRingHandler
 
 __all__ = [
     "PlayerHandler",
@@ -13,5 +14,6 @@ __all__ = [
     "EquipmentHandler",
     "BreakthroughHandler",
     "PillHandler",
-    "ShopHandler"
+    "ShopHandler",
+    "StorageRingHandler"
 ]

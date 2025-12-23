@@ -6,13 +6,15 @@ from ..data import DataBase
 
 if TYPE_CHECKING:
     from ..config_manager import ConfigManager
+    from .storage_ring_manager import StorageRingManager
 
 class EquipmentManager:
     """装备管理器 - 处理装备的穿戴、卸下和属性计算"""
 
-    def __init__(self, db: DataBase, config_manager: "ConfigManager" = None):
+    def __init__(self, db: DataBase, config_manager: "ConfigManager" = None, storage_ring_manager: "StorageRingManager" = None):
         self.db = db
         self.config_manager = config_manager
+        self.storage_ring_manager = storage_ring_manager
 
     def parse_item_from_name(self, item_name: str, items_data: dict, weapons_data: dict = None) -> Optional[Item]:
         """从物品名称解析为Item对象
@@ -189,7 +191,9 @@ class EquipmentManager:
             player.weapon = item.name
             await self.db.update_player(player)
             if old_item:
-                return True, f"已将【{old_item}】替换为【{item.name}】（{item.rank}）"
+                # 尝试将旧装备存入储物戒
+                storage_msg = await self._store_old_equipment(player, old_item)
+                return True, f"已将【{old_item}】替换为【{item.name}】（{item.rank}）{storage_msg}"
             else:
                 return True, f"已装备武器【{item.name}】（{item.rank}）"
 
@@ -198,7 +202,9 @@ class EquipmentManager:
             player.armor = item.name
             await self.db.update_player(player)
             if old_item:
-                return True, f"已将【{old_item}】替换为【{item.name}】（{item.rank}）"
+                # 尝试将旧装备存入储物戒
+                storage_msg = await self._store_old_equipment(player, old_item)
+                return True, f"已将【{old_item}】替换为【{item.name}】（{item.rank}）{storage_msg}"
             else:
                 return True, f"已装备防具【{item.name}】（{item.rank}）"
 
@@ -207,7 +213,9 @@ class EquipmentManager:
             player.main_technique = item.name
             await self.db.update_player(player)
             if old_item:
-                return True, f"已将主修心法【{old_item}】替换为【{item.name}】（{item.rank}）"
+                # 尝试将旧心法存入储物戒
+                storage_msg = await self._store_old_equipment(player, old_item)
+                return True, f"已将主修心法【{old_item}】替换为【{item.name}】（{item.rank}）{storage_msg}"
             else:
                 return True, f"已装备主修心法【{item.name}】（{item.rank}）"
 
@@ -275,3 +283,22 @@ class EquipmentManager:
             return True, f"已卸下功法【{slot_or_name}】"
 
         return False, f"未找到装备：{slot_or_name}"
+
+    async def _store_old_equipment(self, player: Player, item_name: str) -> str:
+        """尝试将旧装备存入储物戒
+
+        Args:
+            player: 玩家对象
+            item_name: 物品名称
+
+        Returns:
+            存储结果消息
+        """
+        if not self.storage_ring_manager:
+            return ""
+
+        success, msg = await self.storage_ring_manager.store_item(player, item_name, 1, silent=True)
+        if success:
+            return f"\n旧装备【{item_name}】已存入储物戒"
+        else:
+            return f"\n⚠️ 旧装备【{item_name}】存入储物戒失败：{msg}"

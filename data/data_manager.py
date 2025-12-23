@@ -37,8 +37,9 @@ class DataBase:
                 spiritual_qi, max_spiritual_qi, blood_qi, max_blood_qi,
                 magic_damage, physical_damage, magic_defense, physical_defense, mental_power,
                 weapon, armor, main_technique, techniques,
-                active_pill_effects, permanent_pill_gains, has_resurrection_pill, has_debuff_shield, pills_inventory
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                active_pill_effects, permanent_pill_gains, has_resurrection_pill, has_debuff_shield, pills_inventory,
+                storage_ring, storage_ring_items
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 player.user_id,
@@ -68,7 +69,9 @@ class DataBase:
                 player.permanent_pill_gains,
                 player.has_resurrection_pill,
                 int(player.has_debuff_shield),
-                player.pills_inventory
+                player.pills_inventory,
+                player.storage_ring,
+                player.storage_ring_items
             )
         )
         await self.conn.commit()
@@ -117,7 +120,9 @@ class DataBase:
                 permanent_pill_gains = ?,
                 has_resurrection_pill = ?,
                 has_debuff_shield = ?,
-                pills_inventory = ?
+                pills_inventory = ?,
+                storage_ring = ?,
+                storage_ring_items = ?
             WHERE user_id = ?
             """,
             (
@@ -148,6 +153,8 @@ class DataBase:
                 player.has_resurrection_pill,
                 int(player.has_debuff_shield),
                 player.pills_inventory,
+                player.storage_ring,
+                player.storage_ring_items,
                 player.user_id
             )
         )

@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 10  # 版本号提升 - 清理废弃字段
+LATEST_DB_VERSION = 11  # 版本号提升 - 添加储物戒系统
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -254,7 +254,9 @@ async def _migrate_to_v10(conn: aiosqlite.Connection, config_manager: ConfigMana
                 permanent_pill_gains TEXT NOT NULL DEFAULT '{}',
                 has_resurrection_pill INTEGER NOT NULL DEFAULT 0,
                 has_debuff_shield INTEGER NOT NULL DEFAULT 0,
-                pills_inventory TEXT NOT NULL DEFAULT '{}'
+                pills_inventory TEXT NOT NULL DEFAULT '{}',
+                storage_ring TEXT NOT NULL DEFAULT '基础储物戒',
+                storage_ring_items TEXT NOT NULL DEFAULT '{}'
             )
         """)
 
@@ -278,6 +280,18 @@ async def _migrate_to_v10(conn: aiosqlite.Connection, config_manager: ConfigMana
         logger.info("没有发现废弃字段，跳过清理")
 
     logger.info("v10迁移完成：清理废弃字段")
+
+
+@migration(11)
+async def _migrate_to_v11(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v11 - 添加储物戒系统"""
+    logger.info("开始迁移到v11：添加储物戒系统")
+
+    # 添加储物戒字段
+    await conn.execute("ALTER TABLE players ADD COLUMN storage_ring TEXT NOT NULL DEFAULT '基础储物戒'")
+    await conn.execute("ALTER TABLE players ADD COLUMN storage_ring_items TEXT NOT NULL DEFAULT '{}'")
+
+    logger.info("v11迁移完成：储物戒系统 - 所有玩家已配备基础储物戒")
 
 
 async def _create_all_tables_v2(conn: aiosqlite.Connection):
@@ -320,7 +334,9 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             permanent_pill_gains TEXT NOT NULL DEFAULT '{}',
             has_resurrection_pill INTEGER NOT NULL DEFAULT 0,
             has_debuff_shield INTEGER NOT NULL DEFAULT 0,
-            pills_inventory TEXT NOT NULL DEFAULT '{}'
+            pills_inventory TEXT NOT NULL DEFAULT '{}',
+            storage_ring TEXT NOT NULL DEFAULT '基础储物戒',
+            storage_ring_items TEXT NOT NULL DEFAULT '{}'
         )
     """)
 

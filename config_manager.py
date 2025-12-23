@@ -18,6 +18,7 @@ class ConfigManager:
         self.pills_data: Dict[str, dict] = {}  # 破境丹数据，key为丹药名称
         self.exp_pills_data: Dict[str, dict] = {}  # 修为丹数据，key为丹药名称
         self.utility_pills_data: Dict[str, dict] = {}  # 功能丹数据，key为丹药名称
+        self.storage_rings_data: Dict[str, dict] = {}  # 储物戒数据，key为储物戒名称
         self._load_all()
 
     def get_level_data(self, cultivation_type: str = "灵修") -> List[dict]:
@@ -106,6 +107,9 @@ class ConfigManager:
         utility_pills_path = self._base_dir / "config" / "utility_pills.json"
         self.utility_pills_data = self._load_items_data(utility_pills_path)
 
+        storage_rings_path = self._base_dir / "config" / "storage_rings.json"
+        self.storage_rings_data = self._load_items_data(storage_rings_path)
+
         logger.info(
             f"配置管理器初始化完成，"
             f"加载了 {len(self.level_data)} 个灵修境界配置，"
@@ -114,5 +118,6 @@ class ConfigManager:
             f"{len(self.weapons_data)} 个武器配置，"
             f"{len(self.pills_data)} 个破境丹配置，"
             f"{len(self.exp_pills_data)} 个修为丹配置，"
-            f"{len(self.utility_pills_data)} 个功能丹配置"
+            f"{len(self.utility_pills_data)} 个功能丹配置，"
+            f"{len(self.storage_rings_data)} 个储物戒配置"
         )

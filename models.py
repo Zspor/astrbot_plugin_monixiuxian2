@@ -95,6 +95,10 @@ class Player:
     has_debuff_shield: bool = False  # 是否拥有一次负面效果免疫
     pills_inventory: str = "{}"  # 丹药背包（JSON字符串，格式：{pill_id: count}）
 
+    # 储物戒系统字段
+    storage_ring: str = "基础储物戒"  # 当前装备的储物戒名称
+    storage_ring_items: str = "{}"  # 储物戒中的物品（JSON字符串，格式：{item_name: count}）
+
     def get_level(self, config_manager: "ConfigManager") -> str:
         """获取境界名称"""
         level_data = config_manager.get_level_data(self.cultivation_type)
@@ -152,6 +156,17 @@ class Player:
     def set_pills_inventory(self, inventory: dict):
         """设置丹药背包"""
         self.pills_inventory = json.dumps(inventory, ensure_ascii=False)
+
+    def get_storage_ring_items(self) -> dict:
+        """获取储物戒物品"""
+        try:
+            return json.loads(self.storage_ring_items)
+        except:
+            return {}
+
+    def set_storage_ring_items(self, items: dict):
+        """设置储物戒物品"""
+        self.storage_ring_items = json.dumps(items, ensure_ascii=False)
 
     def get_total_attributes(self, equipped_items: List[Item], pill_multipliers: Optional[dict] = None) -> dict:
         """计算包含装备加成和丹药效果的总属性

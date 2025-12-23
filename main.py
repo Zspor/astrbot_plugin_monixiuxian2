@@ -4,7 +4,7 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api.event import AstrMessageEvent, filter
 from .data import DataBase, MigrationManager
 from .config_manager import ConfigManager
-from .handlers import MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, PillHandler, ShopHandler
+from .handlers import MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, PillHandler, ShopHandler, StorageRingHandler
 
 # 指令定义
 CMD_HELP = "修仙帮助"
@@ -25,12 +25,20 @@ CMD_PILL_PAVILION = "丹阁"
 CMD_WEAPON_PAVILION = "器阁"
 CMD_TREASURE_PAVILION = "百宝阁"
 CMD_BUY = "购买"
+CMD_STORAGE_RING = "储物戒"
+CMD_STORE_ITEM = "存入"
+CMD_RETRIEVE_ITEM = "取出"
+CMD_UPGRADE_RING = "更换储物戒"
+CMD_DISCARD_ITEM = "丢弃"
+CMD_GIFT_ITEM = "赠予"
+CMD_ACCEPT_GIFT = "接收"
+CMD_REJECT_GIFT = "拒绝"
 
 @register(
     "astrbot_plugin_xiuxian_lite",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏",
-    "1.0.2dev",
+    "1.0.3dev",
     "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
@@ -52,6 +60,7 @@ class XiuXianPlugin(Star):
         self.breakthrough_handler = BreakthroughHandler(self.db, self.config_manager, self.config)
         self.pill_handler = PillHandler(self.db, self.config_manager)
         self.shop_handler = ShopHandler(self.db, self.config, self.config_manager)
+        self.storage_ring_handler = StorageRingHandler(self.db, self.config_manager)
 
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
@@ -237,4 +246,68 @@ class XiuXianPlugin(Star):
             await self._send_access_denied_message(event)
             return
         async for r in self.shop_handler.handle_buy(event, item_name):
+            yield r
+
+    @filter.command(CMD_STORAGE_RING, "查看储物戒信息")
+    async def handle_storage_ring(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_storage_ring(event):
+            yield r
+
+    @filter.command(CMD_STORE_ITEM, "存入物品到储物戒")
+    async def handle_store_item(self, event: AstrMessageEvent, args: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_store_item(event, args):
+            yield r
+
+    @filter.command(CMD_RETRIEVE_ITEM, "从储物戒取出物品")
+    async def handle_retrieve_item(self, event: AstrMessageEvent, args: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_retrieve_item(event, args):
+            yield r
+
+    @filter.command(CMD_UPGRADE_RING, "升级储物戒")
+    async def handle_upgrade_ring(self, event: AstrMessageEvent, ring_name: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_upgrade_ring(event, ring_name):
+            yield r
+
+    @filter.command(CMD_DISCARD_ITEM, "丢弃储物戒中的物品")
+    async def handle_discard_item(self, event: AstrMessageEvent, args: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_discard_item(event, args):
+            yield r
+
+    @filter.command(CMD_GIFT_ITEM, "赠予物品给其他玩家")
+    async def handle_gift_item(self, event: AstrMessageEvent, args: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_gift_item(event, args):
+            yield r
+
+    @filter.command(CMD_ACCEPT_GIFT, "接收赠予的物品")
+    async def handle_accept_gift(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_accept_gift(event):
+            yield r
+
+    @filter.command(CMD_REJECT_GIFT, "拒绝赠予的物品")
+    async def handle_reject_gift(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.storage_ring_handler.handle_reject_gift(event):
             yield r
