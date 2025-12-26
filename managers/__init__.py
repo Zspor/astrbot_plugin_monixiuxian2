@@ -11,6 +11,11 @@ from .impart_manager import ImpartManager
 from .bank_manager import BankManager
 from .bounty_manager import BountyManager
 from .impart_pk_manager import ImpartPkManager
+# Phase 4
+from .blessed_land_manager import BlessedLandManager
+from .spirit_farm_manager import SpiritFarmManager
+from .dual_cultivation_manager import DualCultivationManager
+from .spirit_eye_manager import SpiritEyeManager
 
 __all__ = [
     "CombatManager",
@@ -24,6 +29,10 @@ __all__ = [
     "ImpartManager",
     "BankManager",
     "BountyManager",
-    "ImpartPkManager"
+    "ImpartPkManager",
+    # Phase 4
+    "BlessedLandManager",
+    "SpiritFarmManager",
+    "DualCultivationManager",
+    "SpiritEyeManager"
 ]
-

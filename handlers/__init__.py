@@ -20,6 +20,11 @@ from .nickname_handler import NicknameHandler
 from .bank_handlers import BankHandlers
 from .bounty_handlers import BountyHandlers
 from .impart_pk_handlers import ImpartPkHandlers
+# Phase 4
+from .blessed_land_handlers import BlessedLandHandlers
+from .spirit_farm_handlers import SpiritFarmHandlers
+from .dual_cultivation_handlers import DualCultivationHandlers
+from .spirit_eye_handlers import SpiritEyeHandlers
 
 __all__ = [
     "PlayerHandler",
@@ -40,5 +45,10 @@ __all__ = [
     "NicknameHandler",
     "BankHandlers",
     "BountyHandlers",
-    "ImpartPkHandlers"
+    "ImpartPkHandlers",
+    # Phase 4
+    "BlessedLandHandlers",
+    "SpiritFarmHandlers",
+    "DualCultivationHandlers",
+    "SpiritEyeHandlers"
 ]

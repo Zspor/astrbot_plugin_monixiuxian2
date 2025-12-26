@@ -377,7 +377,12 @@ class ShopManager:
             elif item.get('discount', 1.0) > 1.0:
                 discount_text = f" [+{int((item['discount'] - 1.0) * 100)}%]"
             stock_text = f"库存紧张:{stock}" if stock <= 3 else f"库存:{stock}"
-            lines.append(f"{i}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n   价格: {item['price']} 灵石 {stock_text}\n")
+            
+            # 获取物品效果描述
+            effect_desc = self._get_item_effect_short(item)
+            effect_line = f"\n   效果: {effect_desc}" if effect_desc else ""
+            
+            lines.append(f"{i}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n   价格: {item['price']} 灵石 {stock_text}{effect_line}\n")
 
         if refresh_hours > 0 and last_refresh:
             remaining = (last_refresh + refresh_hours * 3600) - int(time.time())
@@ -385,6 +390,72 @@ class ShopManager:
                 lines.append(f"\n下次刷新: {remaining // 3600}小时{(remaining % 3600) // 60}分钟后")
         lines.append(f"\n提示: 使用 '购买 [物品名]' 购买物品")
         return "".join(lines)
+
+    def _get_item_effect_short(self, item: Dict) -> str:
+        """获取物品效果的简短描述"""
+        data = item.get('data', {})
+        item_type = item.get('type', '')
+        effects = []
+        
+        # 武器/装备属性
+        if item_type in ['weapon', 'armor', 'accessory']:
+            if data.get('physical_damage', 0) > 0:
+                effects.append(f"物伤+{data['physical_damage']}")
+            if data.get('magic_damage', 0) > 0:
+                effects.append(f"法伤+{data['magic_damage']}")
+            if data.get('physical_defense', 0) > 0:
+                effects.append(f"物防+{data['physical_defense']}")
+            if data.get('magic_defense', 0) > 0:
+                effects.append(f"法防+{data['magic_defense']}")
+            if data.get('mental_power', 0) > 0:
+                effects.append(f"精神力+{data['mental_power']}")
+        
+        # 功法属性
+        elif item_type in ['main_technique', 'technique', '功法']:
+            if data.get('exp_multiplier', 0) > 0:
+                effects.append(f"修炼效率+{int(data['exp_multiplier']*100)}%")
+            if data.get('physical_damage', 0) > 0:
+                effects.append(f"物伤+{data['physical_damage']}")
+            if data.get('magic_damage', 0) > 0:
+                effects.append(f"法伤+{data['magic_damage']}")
+        
+        # 丹药效果
+        elif item_type in ['pill', 'exp_pill', 'utility_pill', 'legacy_pill']:
+            # 尝试从 effect 字段获取
+            effect_data = data.get('effect', {})
+            if isinstance(effect_data, dict):
+                if effect_data.get('add_experience', 0) > 0:
+                    effects.append(f"修为+{effect_data['add_experience']}")
+                if effect_data.get('add_hp', 0) > 0:
+                    effects.append(f"气血+{effect_data['add_hp']}")
+                if effect_data.get('add_max_hp', 0) > 0:
+                    effects.append(f"气血上限+{effect_data['add_max_hp']}")
+                if effect_data.get('add_attack', 0) > 0:
+                    effects.append(f"攻击+{effect_data['add_attack']}")
+                if effect_data.get('add_defense', 0) > 0:
+                    effects.append(f"防御+{effect_data['add_defense']}")
+            
+            # 破境丹特殊处理
+            if data.get('subtype') == 'breakthrough':
+                bonus = data.get('breakthrough_bonus', 0)
+                if bonus > 0:
+                    effects.append(f"突破成功率+{int(bonus*100)}%")
+            
+            # 修为丹
+            if data.get('exp_boost', 0) > 0:
+                effects.append(f"修为+{data['exp_boost']}")
+        
+        # 材料
+        elif item_type == 'material':
+            if data.get('description'):
+                return data['description'][:20]
+        
+        # 如果有描述字段，优先使用
+        if not effects and data.get('description'):
+            desc = data['description']
+            return desc[:25] + "..." if len(desc) > 25 else desc
+        
+        return ", ".join(effects[:3]) if effects else ""
 
     def get_item_details(self, item_data: Dict) -> str:
         """获取物品详细信息

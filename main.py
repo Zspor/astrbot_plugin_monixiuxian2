@@ -11,12 +11,14 @@ from .handlers import (
     PillHandler, ShopHandler, StorageRingHandler,
     SectHandlers, BossHandlers, CombatHandlers, RankingHandlers,
     RiftHandlers, AdventureHandlers, AlchemyHandlers, ImpartHandlers,
-    NicknameHandler, BankHandlers, BountyHandlers, ImpartPkHandlers
+    NicknameHandler, BankHandlers, BountyHandlers, ImpartPkHandlers,
+    BlessedLandHandlers, SpiritFarmHandlers, DualCultivationHandlers, SpiritEyeHandlers
 )
 from .managers import (
     CombatManager, SectManager, BossManager, RiftManager, 
     RankingManager, AdventureManager, AlchemyManager, ImpartManager,
-    BankManager, BountyManager, ImpartPkManager
+    BankManager, BountyManager, ImpartPkManager,
+    BlessedLandManager, SpiritFarmManager, DualCultivationManager, SpiritEyeManager
 )
 
 # 指令定义
@@ -112,11 +114,35 @@ CMD_BOUNTY_ABANDON = "放弃悬赏"
 CMD_IMPART_CHALLENGE = "传承挑战"
 CMD_IMPART_RANKING = "传承排行"
 
+# Phase 4: 洞天福地
+CMD_BLESSED_LAND_INFO = "我的洞天"
+CMD_BLESSED_LAND_BUY = "购买洞天"
+CMD_BLESSED_LAND_UPGRADE = "升级洞天"
+CMD_BLESSED_LAND_COLLECT = "洞天收取"
+
+# Phase 4: 灵田
+CMD_SPIRIT_FARM_INFO = "我的灵田"
+CMD_SPIRIT_FARM_CREATE = "开垦灵田"
+CMD_SPIRIT_FARM_PLANT = "种植"
+CMD_SPIRIT_FARM_HARVEST = "收获"
+CMD_SPIRIT_FARM_UPGRADE = "升级灵田"
+
+# Phase 4: 双修
+CMD_DUAL_CULT_REQUEST = "双修"
+CMD_DUAL_CULT_ACCEPT = "接受双修"
+CMD_DUAL_CULT_REJECT = "拒绝双修"
+
+# Phase 4: 灵眼
+CMD_SPIRIT_EYE_INFO = "灵眼信息"
+CMD_SPIRIT_EYE_CLAIM = "抢占灵眼"
+CMD_SPIRIT_EYE_COLLECT = "灵眼收取"
+CMD_SPIRIT_EYE_RELEASE = "释放灵眼"
+
 @register(
     "astrbot_plugin_monixiuxian2",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏（重构版）",
-    "2.3.1",
+    "2.4.0",
     "https://github.com/xiaojuwa/astrbot_plugin_monixiuxian2"
 )
 class XiuXianPlugin(Star):
@@ -173,6 +199,16 @@ class XiuXianPlugin(Star):
         # Phase 3: 传承PK
         self.impart_pk_mgr = ImpartPkManager(self.db, self.combat_mgr)
         self.impart_pk_handlers = ImpartPkHandlers(self.db, self.impart_pk_mgr)
+        
+        # Phase 4: 扩展功能
+        self.blessed_land_mgr = BlessedLandManager(self.db)
+        self.blessed_land_handlers = BlessedLandHandlers(self.db, self.blessed_land_mgr)
+        self.spirit_farm_mgr = SpiritFarmManager(self.db)
+        self.spirit_farm_handlers = SpiritFarmHandlers(self.db, self.spirit_farm_mgr)
+        self.dual_cult_mgr = DualCultivationManager(self.db)
+        self.dual_cult_handlers = DualCultivationHandlers(self.db, self.dual_cult_mgr)
+        self.spirit_eye_mgr = SpiritEyeManager(self.db)
+        self.spirit_eye_handlers = SpiritEyeHandlers(self.db, self.spirit_eye_mgr)
         
         self.boss_task = None # Boss生成任务
 
@@ -809,4 +845,136 @@ class XiuXianPlugin(Star):
             await self._send_access_denied_message(event)
             return
         async for r in self.impart_pk_handlers.handle_impart_ranking(event):
+            yield r
+
+    # ================= Phase 4: 洞天福地 =================
+    @filter.command(CMD_BLESSED_LAND_INFO, "查看洞天信息")
+    async def handle_blessed_land_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.blessed_land_handlers.handle_blessed_land_info(event):
+            yield r
+
+    @filter.command(CMD_BLESSED_LAND_BUY, "购买洞天")
+    async def handle_blessed_land_buy(self, event: AstrMessageEvent, land_type: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.blessed_land_handlers.handle_purchase(event, land_type):
+            yield r
+
+    @filter.command(CMD_BLESSED_LAND_UPGRADE, "升级洞天")
+    async def handle_blessed_land_upgrade(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.blessed_land_handlers.handle_upgrade(event):
+            yield r
+
+    @filter.command(CMD_BLESSED_LAND_COLLECT, "收取洞天产出")
+    async def handle_blessed_land_collect(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.blessed_land_handlers.handle_collect(event):
+            yield r
+
+    # ================= Phase 4: 灵田 =================
+    @filter.command(CMD_SPIRIT_FARM_INFO, "查看灵田")
+    async def handle_spirit_farm_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_farm_handlers.handle_farm_info(event):
+            yield r
+
+    @filter.command(CMD_SPIRIT_FARM_CREATE, "开垦灵田")
+    async def handle_spirit_farm_create(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_farm_handlers.handle_create_farm(event):
+            yield r
+
+    @filter.command(CMD_SPIRIT_FARM_PLANT, "种植灵草")
+    async def handle_spirit_farm_plant(self, event: AstrMessageEvent, herb_name: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_farm_handlers.handle_plant(event, herb_name):
+            yield r
+
+    @filter.command(CMD_SPIRIT_FARM_HARVEST, "收获灵草")
+    async def handle_spirit_farm_harvest(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_farm_handlers.handle_harvest(event):
+            yield r
+
+    @filter.command(CMD_SPIRIT_FARM_UPGRADE, "升级灵田")
+    async def handle_spirit_farm_upgrade(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_farm_handlers.handle_upgrade_farm(event):
+            yield r
+
+    # ================= Phase 4: 双修 =================
+    @filter.command(CMD_DUAL_CULT_REQUEST, "发起双修")
+    async def handle_dual_cult_request(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.dual_cult_handlers.handle_dual_request(event, target):
+            yield r
+
+    @filter.command(CMD_DUAL_CULT_ACCEPT, "接受双修")
+    async def handle_dual_cult_accept(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.dual_cult_handlers.handle_accept(event):
+            yield r
+
+    @filter.command(CMD_DUAL_CULT_REJECT, "拒绝双修")
+    async def handle_dual_cult_reject(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.dual_cult_handlers.handle_reject(event):
+            yield r
+
+    # ================= Phase 4: 天地灵眼 =================
+    @filter.command(CMD_SPIRIT_EYE_INFO, "查看灵眼")
+    async def handle_spirit_eye_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_eye_handlers.handle_spirit_eye_info(event):
+            yield r
+
+    @filter.command(CMD_SPIRIT_EYE_CLAIM, "抢占灵眼")
+    async def handle_spirit_eye_claim(self, event: AstrMessageEvent, eye_id: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_eye_handlers.handle_claim(event, eye_id):
+            yield r
+
+    @filter.command(CMD_SPIRIT_EYE_COLLECT, "收取灵眼产出")
+    async def handle_spirit_eye_collect(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_eye_handlers.handle_collect(event):
+            yield r
+
+    @filter.command(CMD_SPIRIT_EYE_RELEASE, "释放灵眼")
+    async def handle_spirit_eye_release(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.spirit_eye_handlers.handle_release(event):
             yield r
