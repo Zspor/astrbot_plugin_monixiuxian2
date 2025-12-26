@@ -7,8 +7,10 @@ from .rift_manager import RiftManager
 from .ranking_manager import RankingManager
 from .adventure_manager import AdventureManager
 from .alchemy_manager import AlchemyManager
-
 from .impart_manager import ImpartManager
+from .bank_manager import BankManager
+from .bounty_manager import BountyManager
+from .impart_pk_manager import ImpartPkManager
 
 __all__ = [
     "CombatManager",
@@ -19,5 +21,9 @@ __all__ = [
     "RankingManager",
     "AdventureManager",
     "AlchemyManager",
-    "ImpartManager"
+    "ImpartManager",
+    "BankManager",
+    "BountyManager",
+    "ImpartPkManager"
 ]
+

@@ -10,11 +10,13 @@ from .handlers import (
     MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, 
     PillHandler, ShopHandler, StorageRingHandler,
     SectHandlers, BossHandlers, CombatHandlers, RankingHandlers,
-    RiftHandlers, AdventureHandlers, AlchemyHandlers, ImpartHandlers
+    RiftHandlers, AdventureHandlers, AlchemyHandlers, ImpartHandlers,
+    NicknameHandler, BankHandlers, BountyHandlers, ImpartPkHandlers
 )
 from .managers import (
     CombatManager, SectManager, BossManager, RiftManager, 
-    RankingManager, AdventureManager, AlchemyManager, ImpartManager
+    RankingManager, AdventureManager, AlchemyManager, ImpartManager,
+    BankManager, BountyManager, ImpartPkManager
 )
 
 # 指令定义
@@ -89,11 +91,31 @@ CMD_ALCHEMY_CRAFT = "炼丹"
 # 传承系统指令
 CMD_IMPART_INFO = "传承信息"
 
+# Phase 1: 道号系统
+CMD_CHANGE_NICKNAME = "改道号"
+
+# Phase 2: 灵石银行
+CMD_BANK_INFO = "银行"
+CMD_BANK_DEPOSIT = "存灵石"
+CMD_BANK_WITHDRAW = "取灵石"
+CMD_BANK_INTEREST = "领取利息"
+
+# Phase 2: 悬赏令
+CMD_BOUNTY_LIST = "悬赏令"
+CMD_BOUNTY_ACCEPT = "接取悬赏"
+CMD_BOUNTY_STATUS = "悬赏状态"
+CMD_BOUNTY_COMPLETE = "完成悬赏"
+CMD_BOUNTY_ABANDON = "放弃悬赏"
+
+# Phase 3: 传承PK
+CMD_IMPART_CHALLENGE = "传承挑战"
+CMD_IMPART_RANKING = "传承排行"
+
 @register(
     "astrbot_plugin_monixiuxian2",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏（重构版）",
-    "2.0.1",
+    "2.3.0",
     "https://github.com/xiaojuwa/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
@@ -139,6 +161,17 @@ class XiuXianPlugin(Star):
         self.adventure_handlers = AdventureHandlers(self.db, self.adventure_mgr)
         self.alchemy_handlers = AlchemyHandlers(self.db, self.alchemy_mgr)
         self.impart_handlers = ImpartHandlers(self.db, self.impart_mgr)
+        self.nickname_handler = NicknameHandler(self.db)  # Phase 1
+        
+        # Phase 2: 灵石银行和悬赏令
+        self.bank_mgr = BankManager(self.db)
+        self.bounty_mgr = BountyManager(self.db)
+        self.bank_handlers = BankHandlers(self.db, self.bank_mgr)
+        self.bounty_handlers = BountyHandlers(self.db, self.bounty_mgr)
+        
+        # Phase 3: 传承PK
+        self.impart_pk_mgr = ImpartPkManager(self.db, self.combat_mgr)
+        self.impart_pk_handlers = ImpartPkHandlers(self.db, self.impart_pk_mgr)
         
         self.boss_task = None # Boss生成任务
 
@@ -667,4 +700,104 @@ class XiuXianPlugin(Star):
             await self._send_access_denied_message(event)
             return
         async for r in self.impart_handlers.handle_impart_info(event):
+            yield r
+
+    # ================= Phase 1: 道号系统 =================
+    @filter.command(CMD_CHANGE_NICKNAME, "修改道号")
+    async def handle_change_nickname(self, event: AstrMessageEvent, new_name: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.nickname_handler.handle_change_nickname(event, new_name):
+            yield r
+
+    # ================= Phase 2: 灵石银行 =================
+    @filter.command(CMD_BANK_INFO, "查看银行信息")
+    async def handle_bank_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bank_handlers.handle_bank_info(event):
+            yield r
+
+    @filter.command(CMD_BANK_DEPOSIT, "存入灵石")
+    async def handle_bank_deposit(self, event: AstrMessageEvent, amount: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bank_handlers.handle_deposit(event, amount):
+            yield r
+
+    @filter.command(CMD_BANK_WITHDRAW, "取出灵石")
+    async def handle_bank_withdraw(self, event: AstrMessageEvent, amount: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bank_handlers.handle_withdraw(event, amount):
+            yield r
+
+    @filter.command(CMD_BANK_INTEREST, "领取利息")
+    async def handle_bank_interest(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bank_handlers.handle_claim_interest(event):
+            yield r
+
+    # ================= Phase 2: 悬赏令 =================
+    @filter.command(CMD_BOUNTY_LIST, "查看悬赏任务")
+    async def handle_bounty_list(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bounty_handlers.handle_bounty_list(event):
+            yield r
+
+    @filter.command(CMD_BOUNTY_ACCEPT, "接取悬赏任务")
+    async def handle_bounty_accept(self, event: AstrMessageEvent, bounty_id: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bounty_handlers.handle_accept_bounty(event, bounty_id):
+            yield r
+
+    @filter.command(CMD_BOUNTY_STATUS, "查看悬赏状态")
+    async def handle_bounty_status(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bounty_handlers.handle_bounty_status(event):
+            yield r
+
+    @filter.command(CMD_BOUNTY_COMPLETE, "完成悬赏任务")
+    async def handle_bounty_complete(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bounty_handlers.handle_complete_bounty(event):
+            yield r
+
+    @filter.command(CMD_BOUNTY_ABANDON, "放弃悬赏任务")
+    async def handle_bounty_abandon(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.bounty_handlers.handle_abandon_bounty(event):
+            yield r
+
+    # ================= Phase 3: 传承PK =================
+    @filter.command(CMD_IMPART_CHALLENGE, "发起传承挑战")
+    async def handle_impart_challenge(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.impart_pk_handlers.handle_impart_challenge(event, target):
+            yield r
+
+    @filter.command(CMD_IMPART_RANKING, "查看传承排行")
+    async def handle_impart_ranking(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.impart_pk_handlers.handle_impart_ranking(event):
             yield r

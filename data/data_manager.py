@@ -44,8 +44,9 @@ class DataBase:
                 sect_id, sect_position, sect_contribution, sect_task, sect_elixir_get,
                 blessed_spot_flag, blessed_spot_name,
                 active_pill_effects, permanent_pill_gains, has_resurrection_pill, has_debuff_shield, pills_inventory,
-                storage_ring, storage_ring_items
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                storage_ring, storage_ring_items,
+                daily_pill_usage, last_daily_reset
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 player.user_id,
@@ -90,7 +91,9 @@ class DataBase:
                 int(player.has_debuff_shield),
                 player.pills_inventory,
                 player.storage_ring,
-                player.storage_ring_items
+                player.storage_ring_items,
+                player.daily_pill_usage,
+                player.last_daily_reset
             )
         )
         await self.conn.commit()
@@ -104,6 +107,18 @@ class DataBase:
             row = await cursor.fetchone()
             if row:
                 # 过滤掉 Player 模型中不存在的字段（兼容旧数据库/迁移未完成的情况）
+                filtered_data = {k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}
+                return Player(**filtered_data)
+            return None
+
+    async def get_player_by_name(self, user_name: str) -> Player:
+        """根据道号获取玩家信息"""
+        async with self.conn.execute(
+            "SELECT * FROM players WHERE user_name = ?",
+            (user_name,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
                 filtered_data = {k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}
                 return Player(**filtered_data)
             return None
@@ -154,7 +169,9 @@ class DataBase:
                 has_debuff_shield = ?,
                 pills_inventory = ?,
                 storage_ring = ?,
-                storage_ring_items = ?
+                storage_ring_items = ?,
+                daily_pill_usage = ?,
+                last_daily_reset = ?
             WHERE user_id = ?
             """,
             (
@@ -200,6 +217,8 @@ class DataBase:
                 player.pills_inventory,
                 player.storage_ring,
                 player.storage_ring_items,
+                player.daily_pill_usage,
+                player.last_daily_reset,
                 player.user_id
             )
         )

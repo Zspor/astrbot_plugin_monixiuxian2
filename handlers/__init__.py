@@ -16,6 +16,10 @@ from .rift_handlers import RiftHandlers
 from .adventure_handlers import AdventureHandlers
 from .alchemy_handlers import AlchemyHandlers
 from .impart_handlers import ImpartHandlers
+from .nickname_handler import NicknameHandler
+from .bank_handlers import BankHandlers
+from .bounty_handlers import BountyHandlers
+from .impart_pk_handlers import ImpartPkHandlers
 
 __all__ = [
     "PlayerHandler",
@@ -32,5 +36,9 @@ __all__ = [
     "RiftHandlers",
     "AdventureHandlers",
     "AlchemyHandlers",
-    "ImpartHandlers"
+    "ImpartHandlers",
+    "NicknameHandler",
+    "BankHandlers",
+    "BountyHandlers",
+    "ImpartPkHandlers"
 ]

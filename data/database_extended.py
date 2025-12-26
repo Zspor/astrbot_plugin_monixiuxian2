@@ -458,3 +458,86 @@ class DatabaseExtended:
             from dataclasses import fields
             PLAYER_FIELDS = {f.name for f in fields(Player)}
             return [Player(**{k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}) for row in rows]
+    
+    # ========== Phase 2: 灵石银行 CRUD ==========
+    
+    async def get_bank_account(self, user_id: str) -> Optional[dict]:
+        """获取银行账户信息"""
+        async with self.conn.execute(
+            "SELECT balance, last_interest_time FROM bank_accounts WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {"balance": row[0], "last_interest_time": row[1]}
+            return None
+    
+    async def update_bank_account(self, user_id: str, balance: int, last_interest_time: int):
+        """更新或创建银行账户"""
+        await self.conn.execute(
+            """
+            INSERT INTO bank_accounts (user_id, balance, last_interest_time)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET 
+                balance = excluded.balance,
+                last_interest_time = excluded.last_interest_time
+            """,
+            (user_id, balance, last_interest_time)
+        )
+        await self.conn.commit()
+    
+    # ========== Phase 2: 悬赏令系统 CRUD ==========
+    
+    async def get_active_bounty(self, user_id: str) -> Optional[dict]:
+        """获取用户当前进行中的悬赏任务"""
+        async with self.conn.execute(
+            "SELECT * FROM bounty_tasks WHERE user_id = ? AND status = 1",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+    
+    async def create_bounty(self, user_id: str, bounty_id: int, bounty_name: str, 
+                           target_type: str, target_count: int, rewards: str, 
+                           expire_time: int):
+        """创建悬赏任务"""
+        import time
+        await self.conn.execute(
+            """
+            INSERT INTO bounty_tasks (
+                user_id, bounty_id, bounty_name, target_type, 
+                target_count, current_progress, rewards, 
+                start_time, expire_time, status
+            ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 1)
+            """,
+            (user_id, bounty_id, bounty_name, target_type, 
+             target_count, rewards, int(time.time()), expire_time)
+        )
+        await self.conn.commit()
+    
+    async def update_bounty_progress(self, user_id: str, progress: int):
+        """更新悬赏任务进度"""
+        await self.conn.execute(
+            "UPDATE bounty_tasks SET current_progress = ? WHERE user_id = ? AND status = 1",
+            (progress, user_id)
+        )
+        await self.conn.commit()
+    
+    async def complete_bounty(self, user_id: str) -> bool:
+        """完成悬赏任务"""
+        await self.conn.execute(
+            "UPDATE bounty_tasks SET status = 2 WHERE user_id = ? AND status = 1",
+            (user_id,)
+        )
+        await self.conn.commit()
+        return True
+    
+    async def cancel_bounty(self, user_id: str):
+        """取消悬赏任务"""
+        await self.conn.execute(
+            "UPDATE bounty_tasks SET status = 0 WHERE user_id = ? AND status = 1",
+            (user_id,)
+        )
+        await self.conn.commit()

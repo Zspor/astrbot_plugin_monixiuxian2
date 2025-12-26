@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 12  # 版本号提升 - 添加完整修仙系统（宗门、Boss、秘境等）
+LATEST_DB_VERSION = 14  # Phase 2: 灵石银行、悬赏令系统
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -352,7 +352,10 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             has_debuff_shield INTEGER NOT NULL DEFAULT 0,
             pills_inventory TEXT NOT NULL DEFAULT '{}',
             storage_ring TEXT NOT NULL DEFAULT '基础储物戒',
-            storage_ring_items TEXT NOT NULL DEFAULT '{}'
+            storage_ring_items TEXT NOT NULL DEFAULT '{}',
+            
+            daily_pill_usage TEXT NOT NULL DEFAULT '{}',
+            last_daily_reset TEXT NOT NULL DEFAULT ''
         )
     """)
 
@@ -597,3 +600,58 @@ async def _migrate_to_v12(conn: aiosqlite.Connection, config_manager: ConfigMana
     
     logger.info(f"v12迁移完成：完整修仙系统 - 已为 {len(users)} 个用户初始化扩展数据")
 
+
+@migration(13)
+async def _migrate_to_v13(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v13 - Phase 1: 道号系统、每日限制、物品绑定"""
+    logger.info("开始迁移到v13：Phase 1 功能增强")
+    
+    # 1. 添加每日限制字段
+    logger.info("添加每日限制字段...")
+    try:
+        await conn.execute("ALTER TABLE players ADD COLUMN daily_pill_usage TEXT NOT NULL DEFAULT '{}'")
+    except:
+        pass  # 字段可能已存在
+    try:
+        await conn.execute("ALTER TABLE players ADD COLUMN last_daily_reset TEXT NOT NULL DEFAULT ''")
+    except:
+        pass
+    
+    logger.info("v13迁移完成：Phase 1 功能增强")
+
+
+@migration(14)
+async def _migrate_to_v14(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v14 - Phase 2: 灵石银行、悬赏令系统"""
+    logger.info("开始迁移到v14：Phase 2 经济与任务系统")
+    
+    # 1. 创建银行账户表
+    logger.info("创建银行账户表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_accounts (
+            user_id TEXT PRIMARY KEY,
+            balance INTEGER NOT NULL DEFAULT 0,
+            last_interest_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    
+    # 2. 创建悬赏任务表
+    logger.info("创建悬赏任务表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bounty_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            bounty_id INTEGER NOT NULL,
+            bounty_name TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_count INTEGER NOT NULL,
+            current_progress INTEGER NOT NULL DEFAULT 0,
+            rewards TEXT NOT NULL DEFAULT '{}',
+            start_time INTEGER NOT NULL,
+            expire_time INTEGER NOT NULL,
+            status INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bounty_user ON bounty_tasks(user_id)")
+    
+    logger.info("v14迁移完成：Phase 2 经济与任务系统")
