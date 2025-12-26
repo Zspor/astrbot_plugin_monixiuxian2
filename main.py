@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.star import Context, Star, register
@@ -5,7 +6,16 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from .data import DataBase, MigrationManager
 from .config_manager import ConfigManager
-from .handlers import MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, PillHandler, ShopHandler, StorageRingHandler
+from .handlers import (
+    MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, 
+    PillHandler, ShopHandler, StorageRingHandler,
+    SectHandlers, BossHandlers, CombatHandlers, RankingHandlers,
+    RiftHandlers, AdventureHandlers, AlchemyHandlers, ImpartHandlers
+)
+from .managers import (
+    CombatManager, SectManager, BossManager, RiftManager, 
+    RankingManager, AdventureManager, AlchemyManager
+)
 
 # 指令定义
 CMD_HELP = "修仙帮助"
@@ -34,6 +44,49 @@ CMD_DISCARD_ITEM = "丢弃"
 CMD_GIFT_ITEM = "赠予"
 CMD_ACCEPT_GIFT = "接收"
 CMD_REJECT_GIFT = "拒绝"
+
+# 宗门系统指令
+CMD_CREATE_SECT = "创建宗门"
+CMD_JOIN_SECT = "加入宗门"
+CMD_LEAVE_SECT = "退出宗门"
+CMD_MY_SECT = "我的宗门"
+CMD_SECT_LIST = "宗门列表"
+CMD_SECT_DONATE = "宗门捐献"
+CMD_SECT_KICK = "踢出成员"
+CMD_SECT_TRANSFER = "宗主传位"
+CMD_SECT_POSITION = "职位变更"
+
+# Boss系统指令
+CMD_BOSS_INFO = "世界Boss"
+CMD_BOSS_FIGHT = "挑战Boss"
+CMD_SPAWN_BOSS = "生成Boss"
+
+# 排行榜指令
+CMD_RANK_LEVEL = "境界排行"
+CMD_RANK_POWER = "战力排行"
+CMD_RANK_WEALTH = "灵石排行"
+CMD_RANK_SECT = "宗门排行"
+
+# 战斗指令
+CMD_DUEL = "决斗"
+CMD_SPAR = "切磋"
+
+# 秘境系统指令
+CMD_RIFT_LIST = "秘境列表"
+CMD_RIFT_EXPLORE = "探索秘境"
+CMD_RIFT_COMPLETE = "完成探索"
+
+# 历练系统指令
+CMD_ADVENTURE_START = "开始历练"
+CMD_ADVENTURE_COMPLETE = "完成历练"
+CMD_ADVENTURE_STATUS = "历练状态"
+
+# 炼丹系统指令
+CMD_ALCHEMY_RECIPES = "丹药配方"
+CMD_ALCHEMY_CRAFT = "炼丹"
+
+# 传承系统指令
+CMD_IMPART_INFO = "传承信息"
 
 @register(
     "astrbot_plugin_xiuxian_lite",
@@ -65,6 +118,28 @@ class XiuXianPlugin(Star):
         self.pill_handler = PillHandler(self.db, self.config_manager)
         self.shop_handler = ShopHandler(self.db, self.config, self.config_manager)
         self.storage_ring_handler = StorageRingHandler(self.db, self.config_manager)
+        
+        # 初始化核心管理器
+        self.combat_mgr = CombatManager()
+        self.sect_mgr = SectManager(self.db, self.config_manager)
+        self.boss_mgr = BossManager(self.db, self.combat_mgr, self.config_manager)
+        self.rift_mgr = RiftManager(self.db, self.config_manager)
+        self.rank_mgr = RankingManager(self.db, self.combat_mgr)
+        self.adventure_mgr = AdventureManager(self.db)
+        self.alchemy_mgr = AlchemyManager(self.db, self.config_manager)
+        self.impart_mgr = ImpartManager(self.db)
+
+        # 初始化新功能处理器
+        self.sect_handlers = SectHandlers(self.db, self.sect_mgr)
+        self.boss_handlers = BossHandlers(self.db, self.boss_mgr)
+        self.combat_handlers = CombatHandlers(self.db, self.combat_mgr)
+        self.ranking_handlers = RankingHandlers(self.db, self.rank_mgr)
+        self.rift_handlers = RiftHandlers(self.db, self.rift_mgr)
+        self.adventure_handlers = AdventureHandlers(self.db, self.adventure_mgr)
+        self.alchemy_handlers = AlchemyHandlers(self.db, self.alchemy_mgr)
+        self.impart_handlers = ImpartHandlers(self.db, self.impart_mgr)
+        
+        self.boss_task = None # Boss生成任务
 
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
@@ -102,11 +177,38 @@ class XiuXianPlugin(Star):
         await self.db.connect()
         migration_manager = MigrationManager(self.db.conn, self.config_manager)
         await migration_manager.migrate()
+        
+        # 启动定时任务
+        self.boss_task = asyncio.create_task(self._schedule_boss_spawn())
+        
         logger.info("【修仙插件】已加载。")
 
     async def terminate(self):
+        if self.boss_task:
+            self.boss_task.cancel()
         await self.db.close()
         logger.info("【修仙插件】已卸载。")
+        
+    async def _schedule_boss_spawn(self):
+        """Boss定时生成任务"""
+        while True:
+            try:
+                # 获取配置的刷新时间
+                interval = self.config_manager.boss_config.get("spawn_interval", 3600)
+                await asyncio.sleep(interval)
+                
+                # 尝试生成Boss
+                if self.boss_mgr:
+                    success, msg, boss = await self.boss_mgr.auto_spawn_boss()
+                    if success and boss:
+                        logger.info(f"【修仙插件】自动生成Boss: {boss.boss_name}")
+                        # 这里无法直接发送群消息通知，因为没有event上下文
+                        # 实际应用中可能需要保存Context引用并广播
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Boss生成任务异常: {e}")
+                await asyncio.sleep(60) # 出错后等待1分钟重试
 
     @filter.command(CMD_HELP, "显示帮助信息")
     async def handle_help(self, event: AstrMessageEvent):
@@ -314,4 +416,246 @@ class XiuXianPlugin(Star):
             await self._send_access_denied_message(event)
             return
         async for r in self.storage_ring_handler.handle_reject_gift(event):
+            yield r
+
+    # ================= 宗门系统指令 =================
+
+    @filter.command(CMD_CREATE_SECT, "创建宗门")
+    async def handle_create_sect(self, event: AstrMessageEvent, name: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        if not name:
+            yield event.plain_result(f"请输入宗门名称，例如：/{CMD_CREATE_SECT} 逍遥门")
+            return
+        async for r in self.sect_handlers.handle_create_sect(event, name):
+            yield r
+
+    @filter.command(CMD_JOIN_SECT, "加入宗门")
+    async def handle_join_sect(self, event: AstrMessageEvent, name: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        if not name:
+            yield event.plain_result(f"请输入要加入的宗门名称，例如：/{CMD_JOIN_SECT} 逍遥门")
+            return
+        async for r in self.sect_handlers.handle_join_sect(event, name):
+            yield r
+
+    @filter.command(CMD_LEAVE_SECT, "退出当前宗门")
+    async def handle_leave_sect(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_leave_sect(event):
+            yield r
+
+    @filter.command(CMD_MY_SECT, "查看我的宗门信息")
+    async def handle_my_sect(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_my_sect(event):
+            yield r
+
+    @filter.command(CMD_SECT_LIST, "查看宗门列表")
+    async def handle_sect_list(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_sect_list(event):
+            yield r
+
+    @filter.command(CMD_SECT_DONATE, "宗门捐献")
+    async def handle_sect_donate(self, event: AstrMessageEvent, amount: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        if amount <= 0:
+             yield event.plain_result(f"请输入捐献数量，例如：/{CMD_SECT_DONATE} 1000")
+             return
+        async for r in self.sect_handlers.handle_donate(event, amount):
+            yield r
+
+    @filter.command(CMD_SECT_KICK, "踢出宗门成员")
+    async def handle_sect_kick(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_kick_member(event, target):
+            yield r
+
+    @filter.command(CMD_SECT_TRANSFER, "宗主传位")
+    async def handle_sect_transfer(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_transfer(event, target):
+            yield r
+
+    @filter.command(CMD_SECT_POSITION, "变更成员职位")
+    async def handle_sect_position(self, event: AstrMessageEvent, target: str = "", position: int = -1):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        if position < 0:
+            yield event.plain_result(f"请输入目标和职位ID(0-4)，例如：/{CMD_SECT_POSITION} @某人 1")
+            return
+        async for r in self.sect_handlers.handle_position_change(event, target, position):
+            yield r
+
+    # ================= Boss系统指令 =================
+
+    @filter.command(CMD_BOSS_INFO, "查看世界Boss状态")
+    async def handle_boss_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.boss_handlers.handle_boss_info(event):
+            yield r
+
+    @filter.command(CMD_BOSS_FIGHT, "挑战世界Boss")
+    async def handle_boss_fight(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.boss_handlers.handle_boss_fight(event):
+            yield r
+
+    @filter.command(CMD_SPAWN_BOSS, "生成世界Boss(管理员)")
+    async def handle_spawn_boss(self, event: AstrMessageEvent):
+        # 暂时开放给所有人测试，实际应该鉴权
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.boss_handlers.handle_spawn_boss(event):
+            yield r
+
+    # ================= 排行榜指令 =================
+
+    @filter.command(CMD_RANK_LEVEL, "查看境界排行榜")
+    async def handle_rank_level(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.ranking_handlers.handle_rank_level(event):
+            yield r
+
+    @filter.command(CMD_RANK_POWER, "查看战力排行榜")
+    async def handle_rank_power(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.ranking_handlers.handle_rank_power(event):
+            yield r
+
+    @filter.command(CMD_RANK_WEALTH, "查看财富排行榜")
+    async def handle_rank_wealth(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.ranking_handlers.handle_rank_wealth(event):
+            yield r
+
+    @filter.command(CMD_RANK_SECT, "查看宗门排行榜")
+    async def handle_rank_sect(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.ranking_handlers.handle_rank_sect(event):
+            yield r
+
+    # ================= 战斗指令 =================
+
+    @filter.command(CMD_DUEL, "与其他玩家决斗(消耗气血)")
+    async def handle_duel(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.combat_handlers.handle_duel(event, target):
+            yield r
+            
+    @filter.command(CMD_SPAR, "与其他玩家切磋(无消耗)")
+    async def handle_spar(self, event: AstrMessageEvent, target: str = ""):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.combat_handlers.handle_spar(event, target):
+            yield r
+
+    # ================= 秘境指令 =================
+    @filter.command(CMD_RIFT_LIST, "查看秘境列表")
+    async def handle_rift_list(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.rift_handlers.handle_rift_list(event):
+            yield r
+
+    @filter.command(CMD_RIFT_EXPLORE, "探索秘境")
+    async def handle_rift_explore(self, event: AstrMessageEvent, rift_id: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.rift_handlers.handle_rift_explore(event, rift_id):
+            yield r
+
+    @filter.command(CMD_RIFT_COMPLETE, "完成秘境探索")
+    async def handle_rift_complete(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.rift_handlers.handle_rift_complete(event):
+            yield r
+
+    # ================= 历练指令 =================
+    @filter.command(CMD_ADVENTURE_START, "开始历练")
+    async def handle_adventure_start(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        # 这里默认 medium，后续可以解析参数
+        async for r in self.adventure_handlers.handle_start_adventure(event, "medium"):
+            yield r
+
+    @filter.command(CMD_ADVENTURE_COMPLETE, "完成历练")
+    async def handle_adventure_complete(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.adventure_handlers.handle_complete_adventure(event):
+            yield r
+
+    @filter.command(CMD_ADVENTURE_STATUS, "查看历练状态")
+    async def handle_adventure_status(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.adventure_handlers.handle_adventure_status(event):
+            yield r
+
+    # ================= 炼丹指令 =================
+    @filter.command(CMD_ALCHEMY_RECIPES, "查看丹药配方")
+    async def handle_alchemy_recipes(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.alchemy_handlers.handle_recipes(event):
+            yield r
+
+    @filter.command(CMD_ALCHEMY_CRAFT, "炼制丹药")
+    async def handle_alchemy_craft(self, event: AstrMessageEvent, pill_id: int = 0):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.alchemy_handlers.handle_craft(event, pill_id):
+            yield r
+
+    # ================= 传承指令 =================
+    @filter.command(CMD_IMPART_INFO, "查看传承信息")
+    async def handle_impart_info(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.impart_handlers.handle_impart_info(event):
             yield r

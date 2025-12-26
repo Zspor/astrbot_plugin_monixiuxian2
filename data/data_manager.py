@@ -4,8 +4,9 @@ import aiosqlite
 import json
 from dataclasses import fields
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from ..models import Player
+from .database_extended import DatabaseExtended
 
 # 获取 Player 模型的所有字段名（用于过滤数据库中的多余字段，作为迁移未完成时的兼容）
 PLAYER_FIELDS = {f.name for f in fields(Player)}
@@ -16,11 +17,13 @@ class DataBase:
     def __init__(self, db_file: str = "xiuxian_data_lite.db"):
         self.db_path = Path(db_file)
         self.conn: aiosqlite.Connection = None
+        self.ext: Optional[DatabaseExtended] = None  # 扩展操作类
 
     async def connect(self):
         """连接数据库"""
         self.conn = await aiosqlite.connect(self.db_path)
         self.conn.row_factory = aiosqlite.Row
+        self.ext = DatabaseExtended(self.conn)  # 初始化扩展操作
 
     async def close(self):
         """关闭数据库连接"""
@@ -32,26 +35,39 @@ class DataBase:
         await self.conn.execute(
             """
             INSERT INTO players (
-                user_id, level_index, spiritual_root, cultivation_type, lifespan,
-                experience, gold, state, cultivation_start_time, last_check_in_date,
+                user_id, level_index, spiritual_root,cultivation_type, user_name, lifespan,
+                experience, gold, state, cultivation_start_time, last_check_in_date, level_up_rate,
+                weapon, armor, main_technique, techniques,
+                hp, mp, atk, atkpractice,
                 spiritual_qi, max_spiritual_qi, blood_qi, max_blood_qi,
                 magic_damage, physical_damage, magic_defense, physical_defense, mental_power,
-                weapon, armor, main_technique, techniques,
+                sect_id, sect_position, sect_contribution, sect_task, sect_elixir_get,
+                blessed_spot_flag, blessed_spot_name,
                 active_pill_effects, permanent_pill_gains, has_resurrection_pill, has_debuff_shield, pills_inventory,
                 storage_ring, storage_ring_items
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 player.user_id,
                 player.level_index,
                 player.spiritual_root,
                 player.cultivation_type,
+                player.user_name,
                 player.lifespan,
                 player.experience,
                 player.gold,
                 player.state,
                 player.cultivation_start_time,
                 player.last_check_in_date,
+                player.level_up_rate,
+                player.weapon,
+                player.armor,
+                player.main_technique,
+                player.techniques,
+                player.hp,
+                player.mp,
+                player.atk,
+                player.atkpractice,
                 player.spiritual_qi,
                 player.max_spiritual_qi,
                 player.blood_qi,
@@ -61,10 +77,13 @@ class DataBase:
                 player.magic_defense,
                 player.physical_defense,
                 player.mental_power,
-                player.weapon,
-                player.armor,
-                player.main_technique,
-                player.techniques,
+                player.sect_id,
+                player.sect_position,
+                player.sect_contribution,
+                player.sect_task,
+                player.sect_elixir_get,
+                player.blessed_spot_flag,
+                player.blessed_spot_name,
                 player.active_pill_effects,
                 player.permanent_pill_gains,
                 player.has_resurrection_pill,
@@ -97,12 +116,22 @@ class DataBase:
                 level_index = ?,
                 spiritual_root = ?,
                 cultivation_type = ?,
+                user_name = ?,
                 lifespan = ?,
                 experience = ?,
                 gold = ?,
                 state = ?,
                 cultivation_start_time = ?,
                 last_check_in_date = ?,
+                level_up_rate = ?,
+                weapon = ?,
+                armor = ?,
+                main_technique = ?,
+                techniques = ?,
+                hp = ?,
+                mp = ?,
+                atk = ?,
+                atkpractice = ?,
                 spiritual_qi = ?,
                 max_spiritual_qi = ?,
                 blood_qi = ?,
@@ -112,10 +141,13 @@ class DataBase:
                 magic_defense = ?,
                 physical_defense = ?,
                 mental_power = ?,
-                weapon = ?,
-                armor = ?,
-                main_technique = ?,
-                techniques = ?,
+                sect_id = ?,
+                sect_position = ?,
+                sect_contribution = ?,
+                sect_task = ?,
+                sect_elixir_get = ?,
+                blessed_spot_flag = ?,
+                blessed_spot_name = ?,
                 active_pill_effects = ?,
                 permanent_pill_gains = ?,
                 has_resurrection_pill = ?,
@@ -129,12 +161,22 @@ class DataBase:
                 player.level_index,
                 player.spiritual_root,
                 player.cultivation_type,
+                player.user_name,
                 player.lifespan,
                 player.experience,
                 player.gold,
                 player.state,
                 player.cultivation_start_time,
                 player.last_check_in_date,
+                player.level_up_rate,
+                player.weapon,
+                player.armor,
+                player.main_technique,
+                player.techniques,
+                player.hp,
+                player.mp,
+                player.atk,
+                player.atkpractice,
                 player.spiritual_qi,
                 player.max_spiritual_qi,
                 player.blood_qi,
@@ -144,10 +186,13 @@ class DataBase:
                 player.magic_defense,
                 player.physical_defense,
                 player.mental_power,
-                player.weapon,
-                player.armor,
-                player.main_technique,
-                player.techniques,
+                player.sect_id,
+                player.sect_position,
+                player.sect_contribution,
+                player.sect_task,
+                player.sect_elixir_get,
+                player.blessed_spot_flag,
+                player.blessed_spot_name,
                 player.active_pill_effects,
                 player.permanent_pill_gains,
                 player.has_resurrection_pill,

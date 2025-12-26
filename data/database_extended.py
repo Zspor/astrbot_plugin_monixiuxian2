@@ -1,0 +1,460 @@
+# data/database_extended.py
+"""
+扩展数据库操作类，包含宗门、Boss、秘境等新系统的CRUD方法
+"""
+
+import aiosqlite
+import json
+from typing import List, Optional
+from ..models_extended import (
+    Sect, BuffInfo, Boss, Rift, ImpartInfo, UserCd
+)
+
+
+class DatabaseExtended:
+    """数据库扩展操作类"""
+    
+    def __init__(self, conn: aiosqlite.Connection):
+        self.conn = conn
+    
+    # ========== 宗门系统 CRUD ==========
+    
+    async def create_sect(self, sect: Sect):
+        """创建宗门"""
+        await self.conn.execute(
+            """
+            INSERT INTO sects (
+                sect_name, sect_owner, sect_scale, sect_used_stone,
+                sect_fairyland, sect_materials, mainbuff, secbuff, elixir_room_level
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sect.sect_name, sect.sect_owner, sect.sect_scale,
+                sect.sect_used_stone, sect.sect_fairyland, sect.sect_materials,
+                sect.mainbuff, sect.secbuff, sect.elixir_room_level
+            )
+        )
+        await self.conn.commit()
+        
+        # 获取刚插入的sect_id
+        async with self.conn.execute("SELECT last_insert_rowid()") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+    
+    async def get_sect_by_id(self, sect_id: int) -> Optional[Sect]:
+        """根据ID获取宗门信息"""
+        async with self.conn.execute(
+            "SELECT * FROM sects WHERE sect_id = ?",
+            (sect_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Sect(**dict(row))
+            return None
+    
+    async def get_sect_by_owner(self, owner_id: str) -> Optional[Sect]:
+        """根据宗主ID获取宗门信息"""
+        async with self.conn.execute(
+            "SELECT * FROM sects WHERE sect_owner = ?",
+            (owner_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Sect(**dict(row))
+            return None
+    
+    async def get_sect_by_name(self, sect_name: str) -> Optional[Sect]:
+        """根据宗门名称获取宗门信息"""
+        async with self.conn.execute(
+            "SELECT * FROM sects WHERE sect_name = ?",
+            (sect_name,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Sect(**dict(row))
+            return None
+    
+    async def update_sect(self, sect: Sect):
+        """更新宗门信息"""
+        await self.conn.execute(
+            """
+            UPDATE sects SET
+                sect_name = ?, sect_owner = ?, sect_scale = ?, sect_used_stone = ?,
+                sect_fairyland = ?, sect_materials = ?, mainbuff = ?, secbuff = ?,
+                elixir_room_level = ?
+            WHERE sect_id = ?
+            """,
+            (
+                sect.sect_name, sect.sect_owner, sect.sect_scale,
+                sect.sect_used_stone, sect.sect_fairyland, sect.sect_materials,
+                sect.mainbuff, sect.secbuff, sect.elixir_room_level,
+                sect.sect_id
+            )
+        )
+        await self.conn.commit()
+    
+    async def delete_sect(self, sect_id: int):
+        """删除宗门"""
+        await self.conn.execute("DELETE FROM sects WHERE sect_id = ?", (sect_id,))
+        await self.conn.commit()
+    
+    async def get_all_sects(self) -> List[Sect]:
+        """获取所有宗门"""
+        async with self.conn.execute("SELECT * FROM sects ORDER BY sect_scale DESC") as cursor:
+            rows = await cursor.fetchall()
+            return [Sect(**dict(row)) for row in rows]
+    
+    async def update_sect_materials(self, sect_id: int, materials: int, operation: int = 1):
+        """更新宗门资材
+        
+        Args:
+            sect_id: 宗门ID
+            materials: 资材数量
+            operation: 1=增加, 2=减少
+        """
+        if operation == 1:
+            await self.conn.execute(
+                "UPDATE sects SET sect_materials = sect_materials + ? WHERE sect_id = ?",
+                (materials, sect_id)
+            )
+        else:
+            await self.conn.execute(
+                "UPDATE sects SET sect_materials = sect_materials - ? WHERE sect_id = ?",
+                (materials, sect_id)
+            )
+        await self.conn.commit()
+    
+    async def donate_to_sect(self, sect_id: int, stone_num: int):
+        """宗门捐献（增加灵石和建设度）"""
+        await self.conn.execute(
+            """
+            UPDATE sects SET 
+                sect_used_stone = sect_used_stone + ?,
+                sect_scale = sect_scale + ?
+            WHERE sect_id = ?
+            """,
+            (stone_num, stone_num * 10, sect_id)  # 1灵石 = 10建设度
+        )
+        await self.conn.commit()
+    
+    # ========== BuffInfo 系统 CRUD ==========
+    
+    async def create_buff_info(self, user_id: str):
+        """初始化用户的buff信息"""
+        await self.conn.execute(
+            """
+            INSERT INTO buff_info (
+                user_id, main_buff, sec_buff, faqi_buff, fabao_weapon,
+                armor_buff, atk_buff, blessed_spot, sub_buff
+            ) VALUES (?, 0, 0, 0, 0, 0, 0, 0, 0)
+            """,
+            (user_id,)
+        )
+        await self.conn.commit()
+    
+    async def get_buff_info(self, user_id: str) -> Optional[BuffInfo]:
+        """获取用户buff信息"""
+        async with self.conn.execute(
+            "SELECT * FROM buff_info WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return BuffInfo(**dict(row))
+            return None
+    
+    async def update_buff_info(self, buff_info: BuffInfo):
+        """更新用户buff信息"""
+        await self.conn.execute(
+            """
+            UPDATE buff_info SET
+                main_buff = ?, sec_buff = ?, faqi_buff = ?, fabao_weapon = ?,
+                armor_buff = ?, atk_buff = ?, blessed_spot = ?, sub_buff = ?
+            WHERE user_id = ?
+            """,
+            (
+                buff_info.main_buff, buff_info.sec_buff, buff_info.faqi_buff,
+                buff_info.fabao_weapon, buff_info.armor_buff, buff_info.atk_buff,
+                buff_info.blessed_spot, buff_info.sub_buff, buff_info.user_id
+            )
+        )
+        await self.conn.commit()
+    
+    async def update_user_main_buff(self, user_id: str, buff_id: int):
+        """更新用户主修功法"""
+        await self.conn.execute(
+            "UPDATE buff_info SET main_buff = ? WHERE user_id = ?",
+            (buff_id, user_id)
+        )
+        await self.conn.commit()
+    
+    async def update_user_sec_buff(self, user_id: str, buff_id: int):
+        """更新用户辅修功法"""
+        await self.conn.execute(
+            "UPDATE buff_info SET sec_buff = ? WHERE user_id = ?",
+            (buff_id, user_id)
+        )
+        await self.conn.commit()
+    
+    # ========== Boss 系统 CRUD ==========
+    
+    async def create_boss(self, boss: Boss) -> int:
+        """创建Boss"""
+        await self.conn.execute(
+            """
+            INSERT INTO boss (
+                boss_name, boss_level, hp, max_hp, atk, defense,
+                stone_reward, create_time, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                boss.boss_name, boss.boss_level, boss.hp, boss.max_hp,
+                boss.atk, boss.defense, boss.stone_reward,
+                boss.create_time, boss.status
+            )
+        )
+        await self.conn.commit()
+        
+        async with self.conn.execute("SELECT last_insert_rowid()") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+    
+    async def get_active_boss(self) -> Optional[Boss]:
+        """获取当前存活的Boss"""
+        async with self.conn.execute(
+            "SELECT * FROM boss WHERE status = 1 ORDER BY create_time DESC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Boss(**dict(row))
+            return None
+    
+    async def get_boss_by_id(self, boss_id: int) -> Optional[Boss]:
+        """根据ID获取Boss信息"""
+        async with self.conn.execute(
+            "SELECT * FROM boss WHERE boss_id = ?",
+            (boss_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Boss(**dict(row))
+            return None
+    
+    async def update_boss(self, boss: Boss):
+        """更新Boss信息"""
+        await self.conn.execute(
+            """
+            UPDATE boss SET
+                boss_name = ?, boss_level = ?, hp = ?, max_hp = ?, atk = ?,
+                defense = ?, stone_reward = ?, status = ?
+            WHERE boss_id = ?
+            """,
+            (
+                boss.boss_name, boss.boss_level, boss.hp, boss.max_hp,
+                boss.atk, boss.defense, boss.stone_reward, boss.status,
+                boss.boss_id
+            )
+        )
+        await self.conn.commit()
+    
+    async def defeat_boss(self, boss_id: int):
+        """标记Boss为已击败"""
+        await self.conn.execute(
+            "UPDATE boss SET status = 0 WHERE boss_id = ?",
+            (boss_id,)
+        )
+        await self.conn.commit()
+    
+    # ========== 秘境系统 CRUD ==========
+    
+    async def create_rift(self, rift: Rift) -> int:
+        """创建秘境"""
+        await self.conn.execute(
+            """
+            INSERT INTO rifts (
+                rift_name, rift_level, required_level, rewards
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (rift.rift_name, rift.rift_level, rift.required_level, rift.rewards)
+        )
+        await self.conn.commit()
+        
+        async with self.conn.execute("SELECT last_insert_rowid()") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+    
+    async def get_rift_by_id(self, rift_id: int) -> Optional[Rift]:
+        """根据ID获取秘境信息"""
+        async with self.conn.execute(
+            "SELECT * FROM rifts WHERE rift_id = ?",
+            (rift_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return Rift(**dict(row))
+            return None
+    
+    async def get_all_rifts(self) -> List[Rift]:
+        """获取所有秘境"""
+        async with self.conn.execute(
+            "SELECT * FROM rifts ORDER BY rift_level ASC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [Rift(**dict(row)) for row in rows]
+    
+    # ========== 传承系统 CRUD ==========
+    
+    async def create_impart_info(self, user_id: str):
+        """初始化用户传承信息"""
+        await self.conn.execute(
+            """
+            INSERT INTO impart_info (
+                user_id, impart_hp_per, impart_mp_per, impart_atk_per,
+                impart_know_per, impart_burst_per
+            ) VALUES (?, 0.0, 0.0, 0.0, 0.0, 0.0)
+            """,
+            (user_id,)
+        )
+        await self.conn.commit()
+    
+    async def get_impart_info(self, user_id: str) -> Optional[ImpartInfo]:
+        """获取用户传承信息"""
+        async with self.conn.execute(
+            "SELECT * FROM impart_info WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return ImpartInfo(**dict(row))
+            return None
+    
+    async def update_impart_info(self, impart: ImpartInfo):
+        """更新用户传承信息"""
+        await self.conn.execute(
+            """
+            UPDATE impart_info SET
+                impart_hp_per = ?, impart_mp_per = ?, impart_atk_per = ?,
+                impart_know_per = ?, impart_burst_per = ?
+            WHERE user_id = ?
+            """,
+            (
+                impart.impart_hp_per, impart.impart_mp_per, impart.impart_atk_per,
+                impart.impart_know_per, impart.impart_burst_per, impart.user_id
+            )
+        )
+        await self.conn.commit()
+    
+    # ========== 用户CD系统 CRUD ==========
+    
+    async def create_user_cd(self, user_id: str):
+        """初始化用户CD信息"""
+        await self.conn.execute(
+            """
+            INSERT INTO user_cd (user_id, type, create_time, scheduled_time)
+            VALUES (?, 0, 0, 0)
+            """,
+            (user_id,)
+        )
+        await self.conn.commit()
+    
+    async def get_user_cd(self, user_id: str) -> Optional[UserCd]:
+        """获取用户CD信息"""
+        async with self.conn.execute(
+            "SELECT * FROM user_cd WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return UserCd(**dict(row))
+            return None
+    
+    async def update_user_cd(self, user_cd: UserCd):
+        """更新用户CD信息"""
+        await self.conn.execute(
+            """
+            UPDATE user_cd SET
+                type = ?, create_time = ?, scheduled_time = ?
+            WHERE user_id = ?
+            """,
+            (user_cd.type, user_cd.create_time, user_cd.scheduled_time, user_cd.user_id)
+        )
+        await self.conn.commit()
+    
+    async def set_user_busy(self, user_id: str, busy_type: int, scheduled_time: int = 0):
+        """设置用户忙碌状态
+        
+        Args:
+            user_id: 用户ID
+            busy_type: 0=空闲, 1=闭关, 2=历练, 3=探索秘境
+            scheduled_time: 计划完成时间戳
+        """
+        import time
+        await self.conn.execute(
+            """
+            UPDATE user_cd SET type = ?, create_time = ?, scheduled_time = ?
+            WHERE user_id = ?
+            """,
+            (busy_type, int(time.time()), scheduled_time, user_id)
+        )
+        await self.conn.commit()
+    
+    async def set_user_free(self, user_id: str):
+        """设置用户为空闲状态"""
+        await self.set_user_busy(user_id, 0, 0)
+    
+    # ========== Player扩展字段更新方法 ==========
+    
+    async def update_player_hp_mp(self, user_id: str, hp: int, mp: int):
+        """更新玩家HP和MP"""
+        await self.conn.execute(
+            "UPDATE players SET hp = ?, mp = ? WHERE user_id = ?",
+            (hp, mp, user_id)
+        )
+        await self.conn.commit()
+    
+    async def update_player_sect_info(self, user_id: str, sect_id: int, sect_position: int):
+        """更新玩家宗门信息"""
+        await self.conn.execute(
+            "UPDATE players SET sect_id = ?, sect_position = ? WHERE user_id = ?",
+            (sect_id, sect_position, user_id)
+        )
+        await self.conn.commit()
+    
+    async def update_player_sect_contribution(self, user_id: str, contribution: int):
+        """更新玩家宗门贡献度"""
+        await self.conn.execute(
+            "UPDATE players SET sect_contribution = ? WHERE user_id = ?",
+            (contribution, user_id)
+        )
+        await self.conn.commit()
+    
+    async def increment_sect_task_count(self, user_id: str, count: int = 1):
+        """增加宗门任务完成次数"""
+        await self.conn.execute(
+            "UPDATE players SET sect_task = sect_task + ? WHERE user_id = ?",
+            (count, user_id)
+        )
+        await self.conn.commit()
+    
+    async def reset_sect_tasks(self):
+        """重置所有用户的宗门任务次数（定时任务）"""
+        await self.conn.execute("UPDATE players SET sect_task = 0")
+        await self.conn.commit()
+    
+    async def reset_sect_elixir_get(self):
+        """重置所有用户的宗门丹药领取标记（定时任务）"""
+        await self.conn.execute("UPDATE players SET sect_elixir_get = 0")
+        await self.conn.commit()
+    
+    async def get_sect_members(self, sect_id: int) -> List:
+        """获取宗门所有成员"""
+        from ..models import Player
+        async with self.conn.execute(
+            "SELECT * FROM players WHERE sect_id = ? ORDER BY sect_position ASC, level_index DESC",
+            (sect_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            # 简化返回，只返回部分字段
+            from dataclasses import fields
+            PLAYER_FIELDS = {f.name for f in fields(Player)}
+            return [Player(**{k: v for k, v in dict(row).items() if k in PLAYER_FIELDS}) for row in rows]

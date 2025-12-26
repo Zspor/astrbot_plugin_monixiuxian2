@@ -56,12 +56,13 @@ class Item:
 
 @dataclass
 class Player:
-    """玩家数据模型 - 新属性系统（灵修/体修）+ 装备系统 + 丹药系统"""
+    """玩家数据模型 - 完整修仙系统（参照NoneBot2）"""
 
     user_id: str
     level_index: int = 0
     spiritual_root: str = "未知"
     cultivation_type: str = "灵修"  # 灵修或体修
+    user_name: str = ""  # 道号
 
     # 基础属性
     lifespan: int = 100  # 寿命
@@ -70,6 +71,7 @@ class Player:
     state: str = "空闲"
     cultivation_start_time: int = 0  # 闭关开始时间（Unix时间戳，0表示未闭关）
     last_check_in_date: str = ""  # 最后签到日期（格式：YYYY-MM-DD，空字符串表示从未签到）
+    level_up_rate: int = 0  # 突破成功率加成
 
     # 装备栏
     weapon: str = ""  # 武器
@@ -77,7 +79,13 @@ class Player:
     main_technique: str = ""  # 主修心法
     techniques: str = "[]"  # 功法列表（JSON字符串，最多3个）
 
-    # 新的战斗属性
+    # 战斗属性（HP/MP/ATK系统）
+    hp: int = 0  # 当前气血值
+    mp: int = 0  # 当前真元值
+    atk: int = 0  # 攻击力
+    atkpractice: int = 0  # 攻击修炼等级，每级提升4%攻击力
+
+    # 灵修/体修专用属性
     spiritual_qi: int = 100  # 当前灵气（灵修专用）
     max_spiritual_qi: int = 1000  # 最大灵气容量（灵修专用）
     blood_qi: int = 0  # 当前气血（体修专用）
@@ -87,6 +95,17 @@ class Player:
     magic_defense: int = 5  # 法防
     physical_defense: int = 5  # 物防
     mental_power: int = 100  # 精神力
+
+    # 宗门系统字段
+    sect_id: int = 0  # 宗门ID（0表示未加入宗门）
+    sect_position: int = 4  # 宗门职位：0宗主、1长老、2亲传、3内门、4外门
+    sect_contribution: int = 0  # 宗门贡献度
+    sect_task: int = 0  # 宗门任务完成次数
+    sect_elixir_get: int = 0  # 宗门丹药领取标记（0未领取，1已领取）
+
+    # 洞天福地系统
+    blessed_spot_flag: int = 0  # 是否开启洞天福地（0未开启，1已开启）
+    blessed_spot_name: str = ""  # 洞天福地名称
 
     # 丹药系统字段
     active_pill_effects: str = "[]"  # 当前生效的临时丹药效果（JSON字符串）

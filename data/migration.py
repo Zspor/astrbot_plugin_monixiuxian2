@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 11  # 版本号提升 - 添加储物戒系统
+LATEST_DB_VERSION = 12  # 版本号提升 - 添加完整修仙系统（宗门、Boss、秘境等）
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -359,3 +359,139 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
     """)
 
     logger.info("数据库表已创建完成（v2 - 新属性系统）")
+
+
+@migration(12)
+async def _migrate_to_v12(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v12 - 添加完整修仙系统（宗门、Boss、秘境、战斗系统等）"""
+    logger.info("开始迁移到v12：添加完整修仙系统")
+    
+    # 1. 添加Player新字段（战斗属性和宗门）
+    logger.info("添加战斗属性字段...")
+    await conn.execute("ALTER TABLE players ADD COLUMN user_name TEXT NOT NULL DEFAULT ''")
+    await conn.execute("ALTER TABLE players ADD COLUMN level_up_rate INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN hp INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN mp INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN atk INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN atkpractice INTEGER NOT NULL DEFAULT 0")
+    
+    logger.info("添加宗门相关字段...")
+    await conn.execute("ALTER TABLE players ADD COLUMN sect_id INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN sect_position INTEGER NOT NULL DEFAULT 4")
+    await conn.execute("ALTER TABLE players ADD COLUMN sect_contribution INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN sect_task INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN sect_elixir_get INTEGER NOT NULL DEFAULT 0")
+    
+    logger.info("添加洞天福地字段...")
+    await conn.execute("ALTER TABLE players ADD COLUMN blessed_spot_flag INTEGER NOT NULL DEFAULT 0")
+    await conn.execute("ALTER TABLE players ADD COLUMN blessed_spot_name TEXT NOT NULL DEFAULT ''")
+    
+    # 2. 创建新表
+    logger.info("创建宗门表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS sects (
+            sect_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sect_name TEXT NOT NULL UNIQUE,
+            sect_owner TEXT NOT NULL,
+            sect_scale INTEGER NOT NULL DEFAULT 0,
+            sect_used_stone INTEGER NOT NULL DEFAULT 0,
+            sect_fairyland INTEGER NOT NULL DEFAULT 0,
+            sect_materials INTEGER NOT NULL DEFAULT 0,
+            mainbuff TEXT NOT NULL DEFAULT '0',
+            secbuff TEXT NOT NULL DEFAULT '0',
+            elixir_room_level INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_sect_owner ON sects(sect_owner)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_sect_scale ON sects(sect_scale DESC)")
+    
+    logger.info("创建Buff信息表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS buff_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            main_buff INTEGER NOT NULL DEFAULT 0,
+            sec_buff INTEGER NOT NULL DEFAULT 0,
+            faqi_buff INTEGER NOT NULL DEFAULT 0,
+            fabao_weapon INTEGER NOT NULL DEFAULT 0,
+            armor_buff INTEGER NOT NULL DEFAULT 0,
+            atk_buff INTEGER NOT NULL DEFAULT 0,
+            blessed_spot INTEGER NOT NULL DEFAULT 0,
+            sub_buff INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_buff_user ON buff_info(user_id)")
+    
+    logger.info("创建Boss表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS boss (
+            boss_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            boss_name TEXT NOT NULL,
+            boss_level TEXT NOT NULL,
+            hp INTEGER NOT NULL,
+            max_hp INTEGER NOT NULL,
+            atk INTEGER NOT NULL,
+            defense INTEGER NOT NULL DEFAULT 0,
+            stone_reward INTEGER NOT NULL DEFAULT 0,
+            create_time INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_boss_status ON boss(status, create_time DESC)")
+    
+    logger.info("创建秘境表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS rifts (
+            rift_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rift_name TEXT NOT NULL,
+            rift_level INTEGER NOT NULL,
+            required_level INTEGER NOT NULL,
+            rewards TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    
+    logger.info("创建传承信息表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS impart_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            impart_hp_per REAL NOT NULL DEFAULT 0.0,
+            impart_mp_per REAL NOT NULL DEFAULT 0.0,
+            impart_atk_per REAL NOT NULL DEFAULT 0.0,
+            impart_know_per REAL NOT NULL DEFAULT 0.0,
+            impart_burst_per REAL NOT NULL DEFAULT 0.0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_impart_user ON impart_info(user_id)")
+    
+    logger.info("创建用户CD表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_cd (
+            user_id TEXT PRIMARY KEY,
+            type INTEGER NOT NULL DEFAULT 0,
+            create_time INTEGER NOT NULL DEFAULT 0,
+            scheduled_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    
+    # 3. 初始化现有用户的扩展数据
+    logger.info("为现有用户初始化扩展数据...")
+    async with conn.execute("SELECT user_id FROM players") as cursor:
+        users = await cursor.fetchall()
+        for user in users:
+            user_id = user[0]
+            # 初始化BuffInfo
+            await conn.execute("""
+                INSERT OR IGNORE INTO buff_info (user_id) VALUES (?)
+            """, (user_id,))
+            # 初始化UserCd
+            await conn.execute("""
+                INSERT OR IGNORE INTO user_cd (user_id) VALUES (?)
+            """, (user_id,))
+            # 初始化ImpartInfo
+            await conn.execute("""
+                INSERT OR IGNORE INTO impart_info (user_id) VALUES (?)
+            """, (user_id,))
+    
+    logger.info(f"v12迁移完成：完整修仙系统 - 已为 {len(users)} 个用户初始化扩展数据")
+

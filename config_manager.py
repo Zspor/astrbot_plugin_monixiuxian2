@@ -1,10 +1,9 @@
-# config_manager.py
-
 import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from astrbot.api import logger
+from .data.default_configs import SECT_CONFIG, BOSS_CONFIG, RIFT_CONFIG, ALCHEMY_CONFIG
 
 class ConfigManager:
     """配置管理器，加载境界、物品、武器和丹药配置"""
@@ -19,17 +18,17 @@ class ConfigManager:
         self.exp_pills_data: Dict[str, dict] = {}  # 修为丹数据，key为丹药名称
         self.utility_pills_data: Dict[str, dict] = {}  # 功能丹数据，key为丹药名称
         self.storage_rings_data: Dict[str, dict] = {}  # 储物戒数据，key为储物戒名称
+        
+        # 新增系统配置
+        self.sect_config: Dict[str, Any] = {}
+        self.boss_config: Dict[str, Any] = {}
+        self.rift_config: Dict[str, Any] = {}
+        self.alchemy_config: Dict[str, Any] = {}
+        
         self._load_all()
 
     def get_level_data(self, cultivation_type: str = "灵修") -> List[dict]:
-        """根据修炼类型获取对应的境界数据
-
-        Args:
-            cultivation_type: 修炼类型，"灵修"或"体修"
-
-        Returns:
-            对应的境界数据列表
-        """
+        """根据修炼类型获取对应的境界数据"""
         if cultivation_type == "体修":
             return self.body_level_data
         return self.level_data
@@ -47,6 +46,29 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"加载数据文件 {file_path} 失败: {e}")
             return []
+            
+    def _load_config_with_default(self, file_path: Path, default_config: Dict) -> Dict:
+        """加载配置，如果不存在则创建默认配置"""
+        if not file_path.exists():
+            try:
+                # 确保目录存在
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_config, f, ensure_ascii=False, indent=2)
+                logger.info(f"创建默认配置文件: {file_path.name}")
+                return default_config
+            except Exception as e:
+                logger.error(f"创建配置文件 {file_path} 失败: {e}")
+                return default_config
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.info(f"成功加载配置文件: {file_path.name}")
+                return data
+        except Exception as e:
+            logger.error(f"加载配置文件 {file_path} 失败: {e}")
+            return default_config
 
     def _load_items_data(self, file_path: Path) -> Dict[str, dict]:
         """加载物品配置文件并转换为字典（key为物品名称）"""
@@ -57,18 +79,12 @@ class ConfigManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-                # 支持两种格式：
-                # 1. 数组格式：[{"name": "xxx", ...}, ...]
-                # 2. 字典格式：{"1001": {"name": "xxx", ...}, ...}
                 if isinstance(data, list):
-                    # 数组格式，直接转换为以name为key的字典
                     items_dict = {item.get("name", ""): item for item in data if isinstance(item, dict) and item.get("name")}
                 elif isinstance(data, dict):
-                    # 字典格式（以ID为key），转换为以name为key的字典
                     items_dict = {}
                     for item_id, item_data in data.items():
                         if isinstance(item_data, dict) and item_data.get("name"):
-                            # 添加id字段（如果没有的话）
                             if "id" not in item_data:
                                 item_data["id"] = item_id
                             items_dict[item_data["name"]] = item_data
@@ -84,40 +100,27 @@ class ConfigManager:
 
     def _load_all(self):
         """加载所有配置文件"""
-        # 加载灵修境界配置
-        level_path = self._base_dir / "config" / "level_config.json"
-        self.level_data = self._load_json_data(level_path)
-
-        # 加载体修境界配置
-        body_level_path = self._base_dir / "config" / "body_level_config.json"
-        self.body_level_data = self._load_json_data(body_level_path)
-
-        items_path = self._base_dir / "config" / "items.json"
-        self.items_data = self._load_items_data(items_path)
-
-        weapons_path = self._base_dir / "config" / "weapons.json"
-        self.weapons_data = self._load_items_data(weapons_path)
-
-        pills_path = self._base_dir / "config" / "pills.json"
-        self.pills_data = self._load_items_data(pills_path)
-
-        exp_pills_path = self._base_dir / "config" / "exp_pills.json"
-        self.exp_pills_data = self._load_items_data(exp_pills_path)
-
-        utility_pills_path = self._base_dir / "config" / "utility_pills.json"
-        self.utility_pills_data = self._load_items_data(utility_pills_path)
-
-        storage_rings_path = self._base_dir / "config" / "storage_rings.json"
-        self.storage_rings_data = self._load_items_data(storage_rings_path)
+        config_dir = self._base_dir / "config"
+        
+        # 加载基础配置
+        self.level_data = self._load_json_data(config_dir / "level_config.json")
+        self.body_level_data = self._load_json_data(config_dir / "body_level_config.json")
+        self.items_data = self._load_items_data(config_dir / "items.json")
+        self.weapons_data = self._load_items_data(config_dir / "weapons.json")
+        self.pills_data = self._load_items_data(config_dir / "pills.json")
+        self.exp_pills_data = self._load_items_data(config_dir / "exp_pills.json")
+        self.utility_pills_data = self._load_items_data(config_dir / "utility_pills.json")
+        self.storage_rings_data = self._load_items_data(config_dir / "storage_rings.json")
+        
+        # 加载新系统配置
+        self.sect_config = self._load_config_with_default(config_dir / "sect_config.json", SECT_CONFIG)
+        self.boss_config = self._load_config_with_default(config_dir / "boss_config.json", BOSS_CONFIG)
+        self.rift_config = self._load_config_with_default(config_dir / "rift_config.json", RIFT_CONFIG)
+        self.alchemy_config = self._load_config_with_default(config_dir / "alchemy_config.json", ALCHEMY_CONFIG)
 
         logger.info(
             f"配置管理器初始化完成，"
             f"加载了 {len(self.level_data)} 个灵修境界配置，"
             f"{len(self.body_level_data)} 个体修境界配置，"
-            f"{len(self.items_data)} 个物品配置，"
-            f"{len(self.weapons_data)} 个武器配置，"
-            f"{len(self.pills_data)} 个破境丹配置，"
-            f"{len(self.exp_pills_data)} 个修为丹配置，"
-            f"{len(self.utility_pills_data)} 个功能丹配置，"
-            f"{len(self.storage_rings_data)} 个储物戒配置"
+            f"以及新系统配置 (宗门/Boss/秘境/炼丹)"
         )
