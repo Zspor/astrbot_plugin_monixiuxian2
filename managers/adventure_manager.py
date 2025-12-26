@@ -126,9 +126,18 @@ class AdventureManager:
         # 5. 随机事件
         event = self._trigger_random_event()
         
-        # 6. 计算基础奖励（基于修为和时长）
-        base_exp = int(player.experience * 0.05 * (adventure_duration / 3600))  # 每小时5%修为
-        base_gold = int(player.experience * 0.02 * (adventure_duration / 3600))  # 每小时2%修为转换为灵石
+        # 6. 计算基础奖励（时长基础 + 修为加成）
+        # 基础奖励：每分钟固定获得一些修为和灵石
+        duration_minutes = adventure_duration / 60
+        base_exp_per_min = 50  # 每分钟基础50修为
+        base_gold_per_min = 10  # 每分钟基础10灵石
+        
+        # 额外加成：根据玩家当前修为额外奖励
+        bonus_exp = int(player.experience * 0.03 * (adventure_duration / 3600))  # 每小时3%修为
+        bonus_gold = int(player.experience * 0.01 * (adventure_duration / 3600))  # 每小时1%修为转换为灵石
+        
+        base_exp = int(duration_minutes * base_exp_per_min) + bonus_exp
+        base_gold = int(duration_minutes * base_gold_per_min) + bonus_gold
         
         # 7. 应用事件倍数
         final_exp = int(base_exp * event["exp_mult"])
