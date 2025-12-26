@@ -160,7 +160,6 @@ class PlayerHandler:
                 "防具": player.armor if player.armor else "无",
                 "所在宗门": sect_name,
                 "宗门职位": position_name,
-                "注册位数": player.id,
                 # 排行榜暂未查询，显示未知
                 "修为排行": "未知",
                 "灵石排行": "未知"

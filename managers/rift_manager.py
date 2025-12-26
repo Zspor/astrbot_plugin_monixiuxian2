@@ -19,8 +19,22 @@ class RiftManager:
     
     def __init__(self, db: DataBase, config_manager=None):
         self.db = db
+        self.config_manager = config_manager
         self.config = config_manager.rift_config if config_manager else {}
         self.explore_duration = self.config.get("default_duration", self.DEFAULT_DURATION)
+    
+    def _get_level_name(self, level_index: int) -> str:
+        """获取境界名称"""
+        if self.config_manager and hasattr(self.config_manager, 'level_data'):
+            if 0 <= level_index < len(self.config_manager.level_data):
+                return self.config_manager.level_data[level_index].get("level_name", f"境界{level_index}")
+        # 默认境界名称
+        level_names = ["炼气期一层", "炼气期二层", "炼气期三层", "炼气期四层", "炼气期五层",
+                       "炼气期六层", "炼气期七层", "炼气期八层", "炼气期九层", "炼气期十层",
+                       "筑基期初期", "筑基期中期", "筑基期后期", "金丹期初期", "金丹期中期", "金丹期后期"]
+        if 0 <= level_index < len(level_names):
+            return level_names[level_index]
+        return f"境界{level_index}"
     
     async def list_rifts(self) -> Tuple[bool, str]:
         """
@@ -42,13 +56,17 @@ class RiftManager:
             rewards_dict = rift.get_rewards()
             exp_range = rewards_dict.get("exp", [0, 0])
             gold_range = rewards_dict.get("gold", [0, 0])
+            level_name = self._get_level_name(rift.required_level)
             
-            msg += f"【{rift.rift_name}】\n"
-            msg += f"  等级要求：境界 {rift.required_level} 及以上\n"
-            msg += f"  修为奖励：{exp_range[0]}-{exp_range[1]}\n"
-            msg += f"  灵石奖励：{gold_range[0]}-{gold_range[1]}\n\n"
+            msg += f"【{rift.rift_name}】(ID:{rift.rift_id})\n"
+            if rift.required_level == 0:
+                msg += f"  等级要求：无限制\n"
+            else:
+                msg += f"  等级要求：{level_name} 及以上\n"
+            msg += f"  修为奖励：{exp_range[0]:,}-{exp_range[1]:,}\n"
+            msg += f"  灵石奖励：{gold_range[0]:,}-{gold_range[1]:,}\n\n"
         
-        msg += "使用 /explore_rift <秘境ID> 探索秘境"
+        msg += "💡 使用 /探索秘境 <ID> 进入（如：/探索秘境 1）"
         
         return True, msg
     
@@ -84,17 +102,18 @@ class RiftManager:
         # 3. 检查秘境
         rift = await self.db.ext.get_rift_by_id(rift_id)
         if not rift:
-            return False, "❌ 秘境不存在！"
+            return False, "❌ 秘境不存在！使用 /秘境列表 查看可用秘境"
         
         # 4. 检查境界要求
         if player.level_index < rift.required_level:
-            return False, f"❌ 探索此秘境需要达到境界等级 {rift.required_level}！"
+            level_name = self._get_level_name(rift.required_level)
+            return False, f"❌ 探索【{rift.rift_name}】需要达到【{level_name}】！"
         
         # 5. 设置探索状态
         scheduled_time = int(time.time()) + self.explore_duration
         await self.db.ext.set_user_busy(user_id, 3, scheduled_time)  # 3=探索秘境
         
-        return True, f"✨ 你进入了『{rift.rift_name}』！探索需要 {self.explore_duration//60} 分钟。"
+        return True, f"✨ 你进入了『{rift.rift_name}』！探索需要 {self.explore_duration//60} 分钟。\n使用 /完成探索 领取奖励"
     
     async def finish_exploration(
         self,
