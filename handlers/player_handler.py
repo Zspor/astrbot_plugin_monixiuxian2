@@ -272,6 +272,7 @@ class PlayerHandler:
         player.state = "修炼中"
         player.cultivation_start_time = int(time.time())
         await self.db.update_player(player)
+        await self.db.ext.set_user_busy(player.user_id, UserStatus.CULTIVATING, 0)
 
         yield event.plain_result(
             "🧘 道友已进入闭关状态\n"
@@ -344,6 +345,7 @@ class PlayerHandler:
         player.state = "空闲"
         player.cultivation_start_time = 0
         await self.db.update_player(player)
+        await self.db.ext.set_user_free(player.user_id)
 
         # 计算闭关时长显示
         hours = duration_minutes // 60

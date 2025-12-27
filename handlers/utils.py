@@ -7,6 +7,7 @@ from typing import Callable, Coroutine, AsyncGenerator
 
 from astrbot.api.event import AstrMessageEvent
 from ..models import Player
+from ..models_extended import UserStatus
 
 # 指令常量
 CMD_START_XIUXIAN = "我要修仙"
@@ -14,6 +15,45 @@ CMD_PLAYER_INFO = "我的信息"
 CMD_START_CULTIVATION = "闭关"
 CMD_END_CULTIVATION = "出关"
 CMD_CHECK_IN = "签到"
+
+# 忙碌状态下允许执行的命令白名单
+BUSY_STATE_ALLOWED_COMMANDS = [
+    # 基础信息查看
+    CMD_PLAYER_INFO,
+    "我的信息",
+    CMD_CHECK_IN,
+    "签到",
+    # 银行相关
+    "银行",
+    "存灵石",
+    "取灵石",
+    "领取利息",
+    "贷款",
+    "还款",
+    "银行流水",
+    # 背包查看（只读操作）
+    "丹药背包",
+    "我的丹药",
+    "我的装备",
+    "储物戒",
+    "查看储物戒",
+    # 排行榜查看
+    "排行榜",
+    "境界榜",
+    "战力榜",
+    "灵石榜",
+    "宗门榜",
+    "存款榜",
+    # 帮助信息
+    "修仙帮助",
+    # 闭关相关
+    CMD_END_CULTIVATION,
+    "出关",
+    # 历练/秘境结算
+    "结束历练",
+    "结束秘境",
+    "结束任务",
+]
 
 
 def player_required(func: Callable[..., Coroutine[any, any, AsyncGenerator[any, None]]]):
@@ -39,32 +79,25 @@ def player_required(func: Callable[..., Coroutine[any, any, AsyncGenerator[any, 
                 yield event.plain_result(loan_warning["message"])
                 return
         
+        message_text = event.get_message_str().strip()
+        
+        # 检查 user_cd 表的忙碌状态
+        user_cd = await self.db.ext.get_user_cd(player.user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            # 玩家处于忙碌状态，检查命令是否在白名单中
+            is_allowed = _is_command_allowed(message_text, BUSY_STATE_ALLOWED_COMMANDS)
+            
+            if not is_allowed:
+                status_name = UserStatus.get_name(user_cd.type)
+                yield event.plain_result(f"道友当前正在「{status_name}」，无法分心他顾。\n💡 可使用「我的信息」「签到」「银行」等基础指令。")
+                return
+        
         # 状态检查：如果处于修炼中（闭关），只允许出关、查看信息和签到
         if player.state == "修炼中":
-            message_text = event.get_message_str().strip()
-
-            # 闭关时只能出关、查看信息、签到和银行操作
-            allowed_commands = [
-                CMD_END_CULTIVATION,
-                CMD_PLAYER_INFO,
-                CMD_CHECK_IN,
-                "银行",
-                "存灵石",
-                "取灵石",
-                "领取利息",
-                "贷款",
-                "还款",
-                "银行流水",
-            ]
-
-            is_allowed = False
-            for cmd in allowed_commands:
-                if message_text.startswith(cmd):
-                    is_allowed = True
-                    break
+            is_allowed = _is_command_allowed(message_text, BUSY_STATE_ALLOWED_COMMANDS)
 
             if not is_allowed:
-                yield event.plain_result(f"道友当前正在「{player.state}」中，无法分心他顾。")
+                yield event.plain_result(f"道友当前正在「{player.state}」中，无法分心他顾。\n💡 可使用「出关」「我的信息」「签到」「银行」等基础指令。")
                 return
 
         # 将 player 对象作为第一个参数传递给原始函数
@@ -76,6 +109,14 @@ def player_required(func: Callable[..., Coroutine[any, any, AsyncGenerator[any, 
             yield event.plain_result(loan_warning["warning_message"])
 
     return wrapper
+
+
+def _is_command_allowed(message_text: str, allowed_commands: list) -> bool:
+    """检查命令是否在允许列表中"""
+    for cmd in allowed_commands:
+        if message_text.startswith(cmd):
+            return True
+    return False
 
 
 async def _check_loan_status(db, player: Player) -> dict:

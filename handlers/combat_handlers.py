@@ -4,6 +4,9 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.all import *
 from ..managers.combat_manager import CombatManager, CombatStats
 from ..data.data_manager import DataBase
+from .utils import player_required
+from ..models import Player
+from ..models_extended import UserStatus
 
 # 战斗冷却配置（秒）
 DUEL_COOLDOWN = 300  # 决斗冷却5分钟
@@ -137,6 +140,20 @@ class CombatHandlers:
             yield event.plain_result("❌ 不能和自己决斗")
             return
 
+        # 检查发起者状态
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正在{current_status}，无法进行战斗！")
+            return
+        
+        # 检查目标状态
+        target_cd = await self.db.ext.get_user_cd(target_id)
+        if target_cd and target_cd.type != UserStatus.IDLE:
+            target_status = UserStatus.get_name(target_cd.type)
+            yield event.plain_result(f"❌ 对方当前正在{target_status}，无法进行战斗！")
+            return
+
         # 检查冷却
         now = int(time.time())
         cooldown = await self._get_combat_cooldown(user_id)
@@ -182,6 +199,20 @@ class CombatHandlers:
 
         if user_id == target_id:
             yield event.plain_result("❌ 不能和自己切磋")
+            return
+
+        # 检查发起者状态
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正在{current_status}，无法进行战斗！")
+            return
+        
+        # 检查目标状态
+        target_cd = await self.db.ext.get_user_cd(target_id)
+        if target_cd and target_cd.type != UserStatus.IDLE:
+            target_status = UserStatus.get_name(target_cd.type)
+            yield event.plain_result(f"❌ 对方当前正在{target_status}，无法进行战斗！")
             return
 
         # 检查冷却

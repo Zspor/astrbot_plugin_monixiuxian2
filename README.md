@@ -4,7 +4,7 @@
   <img src="logo.png" alt="模拟修仙" width="200">
 </p>
 
-> **版本:** v2.9.0  
+> **版本:** v2.9.1  
 > **许可证:** AGPL-3.0  
 > **作者:** xiaojuwa  
 > **基于:** [nonebot_plugin_xiuxian_2](https://github.com/xiuxian-2/nonebot_plugin_xiuxian_2) (部分借鉴与重构)
@@ -280,6 +280,24 @@ astrbot_plugin_monixiuxian2/
 ---
 
 ## 📝 更新日志
+
+### v2.9.1 - 系统行为互斥性修复
+
+**🔴 高严重性修复 (状态互斥)**
+| 问题 | 修复位置 | 说明 |
+|------|----------|------|
+| 双重状态系统不同步 | player_handler.py | 闭关/出关时同步更新user_cd表 |
+| 历练期间可执行突破 | utils.py | @player_required装饰器增加user_cd状态检查 |
+| 历练/秘境期间可发起战斗 | combat_handlers.py | 添加发起者和目标的状态检查 |
+| 秘境期间可炼丹 | alchemy_handlers.py | 添加玩家存在和状态检查 |
+| 历练期间可加入/退出宗门 | sect_handlers.py | 关键操作添加状态检查 |
+
+**✨ 改进**
+- 统一状态检查机制：`@player_required`装饰器现在同时检查`player.state`和`user_cd.type`
+- 新增45+条命令白名单，允许在忙碌状态下执行查看类操作（信息查看、银行、背包、排行榜等）
+- 状态提示优化：显示具体状态名称（历练中/探索秘境中/宗门任务中等）
+
+---
 
 ### v2.9.0 - 安全性与稳定性大修复
 

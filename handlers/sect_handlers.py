@@ -3,6 +3,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.all import *
 from ..managers.sect_manager import SectManager
 from ..data.data_manager import DataBase
+from ..models_extended import UserStatus
 
 class SectHandlers:
     def __init__(self, db: DataBase, sect_mgr: SectManager):
@@ -12,19 +13,33 @@ class SectHandlers:
     async def handle_create_sect(self, event: AstrMessageEvent, name: str):
         """创建宗门"""
         user_id = event.get_sender_id()
-        # 默认消耗和等级要求可以在这里读取配置，暂时硬编码或从mgr获取默认值
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正{current_status}，无法进行此操作！")
+            return
         success, msg = await self.sect_mgr.create_sect(user_id, name)
         yield event.plain_result(msg)
 
     async def handle_join_sect(self, event: AstrMessageEvent, name: str):
         """加入宗门"""
         user_id = event.get_sender_id()
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正{current_status}，无法进行此操作！")
+            return
         success, msg = await self.sect_mgr.join_sect(user_id, name)
         yield event.plain_result(msg)
     
     async def handle_leave_sect(self, event: AstrMessageEvent):
         """退出宗门"""
         user_id = event.get_sender_id()
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正{current_status}，无法进行此操作！")
+            return
         success, msg = await self.sect_mgr.leave_sect(user_id)
         yield event.plain_result(msg)
 
@@ -42,6 +57,11 @@ class SectHandlers:
     async def handle_donate(self, event: AstrMessageEvent, amount: int):
         """宗门捐献"""
         user_id = event.get_sender_id()
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if user_cd and user_cd.type != UserStatus.IDLE:
+            current_status = UserStatus.get_name(user_cd.type)
+            yield event.plain_result(f"❌ 你当前正{current_status}，无法进行此操作！")
+            return
         success, msg = await self.sect_mgr.donate_to_sect(user_id, amount)
         yield event.plain_result(msg)
         
