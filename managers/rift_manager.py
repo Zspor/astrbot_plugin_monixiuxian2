@@ -160,9 +160,10 @@ class RiftManager:
             level_name = self._get_level_name(rift.required_level)
             return False, f"❌ 探索【{rift.rift_name}】需要达到【{level_name}】！"
         
-        # 5. 设置探索状态
+        # 5. 设置探索状态，存储秘境ID
         scheduled_time = int(time.time()) + self.explore_duration
-        await self.db.ext.set_user_busy(user_id, UserStatus.EXPLORING, scheduled_time)
+        extra_data = {"rift_id": rift_id, "rift_level": rift.rift_level}
+        await self.db.ext.set_user_busy(user_id, UserStatus.EXPLORING, scheduled_time, extra_data)
         
         return True, f"✨ 你进入了『{rift.rift_name}』！探索需要 {self.explore_duration//60} 分钟。\n使用 /完成探索 领取奖励"
     
@@ -196,9 +197,27 @@ class RiftManager:
             minutes = remaining // 60
             return False, f"❌ 探索尚未完成！还需要 {minutes} 分钟。", None
         
-        # 4. 随机生成奖励（简化版本，实际应该根据秘境配置）
-        exp_reward = random.randint(1000, 5000)
-        gold_reward = random.randint(500, 2000)
+        # 4. 获取秘境信息（从extra_data中读取）
+        extra_data = user_cd.get_extra_data() if hasattr(user_cd, 'get_extra_data') else {}
+        rift_id = extra_data.get("rift_id", 0)
+        rift_level = extra_data.get("rift_level", 1)
+        
+        # 获取秘境配置
+        rift = await self.db.ext.get_rift_by_id(rift_id) if rift_id else None
+        rift_name = rift.rift_name if rift else "未知秘境"
+        
+        # 5. 根据秘境配置计算奖励
+        if rift:
+            rewards_config = rift.get_rewards()
+            exp_range = rewards_config.get("exp", [1000, 5000])
+            gold_range = rewards_config.get("gold", [500, 2000])
+            exp_reward = random.randint(exp_range[0], exp_range[1])
+            gold_reward = random.randint(gold_range[0], gold_range[1])
+            rift_level = rift.rift_level
+        else:
+            # 兼容旧数据，使用默认奖励
+            exp_reward = random.randint(1000, 5000)
+            gold_reward = random.randint(500, 2000)
         
         # 随机事件
         events = [
@@ -210,10 +229,9 @@ class RiftManager:
         ]
         event = random.choice(events)
         
-        # 5. 物品掉落（根据玩家境界确定秘境等级）
+        # 6. 物品掉落（根据秘境等级）
         dropped_items = []
         item_msg = ""
-        rift_level = self._get_rift_level_by_player(player)
         dropped_items = await self._roll_rift_drops(player, rift_level, event["item_chance"])
         if dropped_items:
             item_lines = []
@@ -237,29 +255,30 @@ class RiftManager:
             if item_lines:
                 item_msg = "\n\n📦 获得物品：\n" + "\n".join(item_lines)
         
-        # 6. 应用奖励
+        # 7. 应用奖励
         player.experience += exp_reward
         player.gold += gold_reward
         await self.db.update_player(player)
         
-        # 7. 清除CD
+        # 8. 清除CD
         await self.db.ext.set_user_free(user_id)
         
         msg = f"""
-🌀 探索完成
+🌀 探索完成 - {rift_name}
 ━━━━━━━━━━━━━━━
 
 {event["desc"]}
 
-获得修为：+{exp_reward}
-获得灵石：+{gold_reward}{item_msg}
+获得修为：+{exp_reward:,}
+获得灵石：+{gold_reward:,}{item_msg}
         """.strip()
         
         reward_data = {
             "exp": exp_reward,
             "gold": gold_reward,
             "event": event["desc"],
-            "items": dropped_items
+            "items": dropped_items,
+            "rift_name": rift_name
         }
         
         return True, msg, reward_data

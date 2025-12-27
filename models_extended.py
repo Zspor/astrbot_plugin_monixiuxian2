@@ -146,3 +146,15 @@ class UserCd:
     type: int = UserStatus.IDLE  # CD类型，参见 UserStatus 枚举
     create_time: int = 0  # 创建时间
     scheduled_time: int = 0  # 计划完成时间
+    extra_data: str = "{}"  # 额外数据（JSON字符串，如秘境ID等）
+    
+    def get_extra_data(self) -> dict:
+        """获取额外数据字典"""
+        try:
+            return json.loads(self.extra_data)
+        except:
+            return {}
+    
+    def set_extra_data(self, data: dict):
+        """设置额外数据"""
+        self.extra_data = json.dumps(data, ensure_ascii=False)

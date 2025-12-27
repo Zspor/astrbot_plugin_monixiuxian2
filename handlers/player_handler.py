@@ -303,6 +303,11 @@ class PlayerHandler:
             yield event.plain_result("道友闭关时间不足1分钟，未获得修为。请继续闭关修炼。")
             return
 
+        # 闭关时长上限（24小时 = 1440分钟），超过部分不计算修为
+        MAX_CULTIVATION_MINUTES = 1440
+        effective_minutes = min(duration_minutes, MAX_CULTIVATION_MINUTES)
+        exceeded_time = duration_minutes > MAX_CULTIVATION_MINUTES
+
         # 更新丹药效果，确保持续结算
         await self.pill_manager.update_temporary_effects(player)
         pill_multipliers = self.pill_manager.calculate_pill_attribute_effects(player)
@@ -323,10 +328,10 @@ class PlayerHandler:
                     technique_bonus = item.exp_multiplier
                     break
 
-        # 计算获得的修为
+        # 计算获得的修为（使用有效时长）
         gained_exp = self.cultivation_manager.calculate_cultivation_exp(
             player,
-            duration_minutes,
+            effective_minutes,
             technique_bonus,
             pill_multipliers
         )
@@ -346,12 +351,18 @@ class PlayerHandler:
         if minutes > 0:
             time_str += f"{minutes}分钟"
 
+        # 超时提示
+        exceed_msg = ""
+        if exceeded_time:
+            effective_hours = effective_minutes // 60
+            exceed_msg = f"\n⚠️ 闭关超过24小时，仅计算前{effective_hours}小时修为"
+
         reply_msg = (
             "🌟 道友出关成功！\n"
             "━━━━━━━━━━━━━━━\n"
             f"⏱️ 闭关时长：{time_str}\n"
-            f"📈 获得修为：{gained_exp}\n"
-            f"💫 当前修为：{player.experience}\n"
+            f"📈 获得修为：{gained_exp:,}{exceed_msg}\n"
+            f"💫 当前修为：{player.experience:,}\n"
             "━━━━━━━━━━━━━━━\n"
             "道友已回归红尘，可继续修行。"
         )

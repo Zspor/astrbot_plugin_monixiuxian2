@@ -119,6 +119,9 @@ class ConfigManager:
         self.alchemy_config = self._load_config_with_default(config_dir / "alchemy_config.json", ALCHEMY_CONFIG)
         self.alchemy_recipes = self._load_items_data(config_dir / "alchemy_recipes.json")
         
+        # 加载游戏配置（包含各系统的硬编码参数）
+        self.game_config = self._load_config_with_default(config_dir / "game_config.json", {})
+        
         self._pill_names_cache = None
 
         logger.info(

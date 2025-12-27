@@ -1,14 +1,59 @@
 # handlers/combat_handlers.py
+import time
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.all import *
 from ..managers.combat_manager import CombatManager, CombatStats
 from ..data.data_manager import DataBase
+
+# 战斗冷却配置（秒）
+DUEL_COOLDOWN = 300  # 决斗冷却5分钟
+SPAR_COOLDOWN = 60   # 切磋冷却1分钟
 
 class CombatHandlers:
     def __init__(self, db: DataBase, combat_mgr: CombatManager, config_manager=None):
         self.db = db
         self.combat_mgr = combat_mgr
         self.config_manager = config_manager
+    
+    async def _get_combat_cooldown(self, user_id: str) -> dict:
+        """获取战斗冷却信息"""
+        try:
+            async with self.db.conn.execute(
+                "SELECT last_duel_time, last_spar_time FROM combat_cooldowns WHERE user_id = ?",
+                (user_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return {"last_duel_time": row[0], "last_spar_time": row[1]}
+        except:
+            pass
+        return {"last_duel_time": 0, "last_spar_time": 0}
+    
+    async def _update_combat_cooldown(self, user_id: str, combat_type: str):
+        """更新战斗冷却时间"""
+        now = int(time.time())
+        try:
+            if combat_type == "duel":
+                await self.db.conn.execute(
+                    """
+                    INSERT INTO combat_cooldowns (user_id, last_duel_time, last_spar_time)
+                    VALUES (?, ?, 0)
+                    ON CONFLICT(user_id) DO UPDATE SET last_duel_time = ?
+                    """,
+                    (user_id, now, now)
+                )
+            else:
+                await self.db.conn.execute(
+                    """
+                    INSERT INTO combat_cooldowns (user_id, last_duel_time, last_spar_time)
+                    VALUES (?, 0, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET last_spar_time = ?
+                    """,
+                    (user_id, now, now)
+                )
+            await self.db.conn.commit()
+        except:
+            pass
 
     async def _get_target_id(self, event: AstrMessageEvent, arg: str) -> str:
         for component in event.message_obj.message:
@@ -86,6 +131,15 @@ class CombatHandlers:
             yield event.plain_result("❌ 不能和自己决斗")
             return
 
+        # 检查冷却
+        now = int(time.time())
+        cooldown = await self._get_combat_cooldown(user_id)
+        last_duel = cooldown.get("last_duel_time", 0)
+        if last_duel and (now - last_duel) < DUEL_COOLDOWN:
+            remaining = DUEL_COOLDOWN - (now - last_duel)
+            yield event.plain_result(f"❌ 决斗冷却中，还需 {remaining // 60} 分 {remaining % 60} 秒")
+            return
+
         # 获取双方数据
         p1_stats = await self._prepare_combat_stats(user_id)
         p2_stats = await self._prepare_combat_stats(target_id)
@@ -104,6 +158,9 @@ class CombatHandlers:
         await self.db.ext.update_player_hp_mp(user_id, result['player1_final_hp'], result['player1_final_mp'])
         await self.db.ext.update_player_hp_mp(target_id, result['player2_final_hp'], result['player2_final_mp'])
         
+        # 更新冷却
+        await self._update_combat_cooldown(user_id, "duel")
+        
         # 生成战报
         log = "\n".join(result['combat_log'])
         yield event.plain_result(f"{log}")
@@ -121,6 +178,15 @@ class CombatHandlers:
             yield event.plain_result("❌ 不能和自己切磋")
             return
 
+        # 检查冷却
+        now = int(time.time())
+        cooldown = await self._get_combat_cooldown(user_id)
+        last_spar = cooldown.get("last_spar_time", 0)
+        if last_spar and (now - last_spar) < SPAR_COOLDOWN:
+            remaining = SPAR_COOLDOWN - (now - last_spar)
+            yield event.plain_result(f"❌ 切磋冷却中，还需 {remaining} 秒")
+            return
+
         p1_stats = await self._prepare_combat_stats(user_id)
         p2_stats = await self._prepare_combat_stats(target_id)
         
@@ -129,6 +195,9 @@ class CombatHandlers:
              return
 
         result = self.combat_mgr.player_vs_player(p1_stats, p2_stats, combat_type=1) # 1=切磋
+        
+        # 更新冷却
+        await self._update_combat_cooldown(user_id, "spar")
         
         log = "\n".join(result['combat_log'])
         yield event.plain_result(f"{log}")

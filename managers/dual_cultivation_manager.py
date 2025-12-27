@@ -12,6 +12,7 @@ __all__ = ["DualCultivationManager"]
 # 双修配置
 DUAL_CULT_COOLDOWN = 3600  # 1小时冷却
 DUAL_CULT_EXP_BONUS = 0.1  # 10%修为互增
+DUAL_CULT_REQUEST_EXPIRE = 300  # 请求过期时间（5分钟）
 
 
 class DualCultivationManager:
@@ -19,7 +20,70 @@ class DualCultivationManager:
     
     def __init__(self, db: DataBase):
         self.db = db
-        self.pending_requests: Dict[str, Dict] = {}  # {target_id: {from_id, from_name, time}}
+    
+    async def _create_request(self, from_id: str, from_name: str, target_id: str) -> int:
+        """创建双修请求（持久化到数据库）"""
+        now = int(time.time())
+        expires_at = now + DUAL_CULT_REQUEST_EXPIRE
+        
+        # 先清理该目标的旧请求
+        await self.db.conn.execute(
+            "DELETE FROM dual_cultivation_requests WHERE target_id = ?",
+            (target_id,)
+        )
+        
+        await self.db.conn.execute(
+            """
+            INSERT INTO dual_cultivation_requests (from_id, from_name, target_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (from_id, from_name, target_id, now, expires_at)
+        )
+        await self.db.conn.commit()
+        
+        async with self.db.conn.execute("SELECT last_insert_rowid()") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+    
+    async def _get_pending_request(self, target_id: str) -> Optional[Dict]:
+        """获取待处理的双修请求"""
+        now = int(time.time())
+        
+        # 清理过期请求
+        await self.db.conn.execute(
+            "DELETE FROM dual_cultivation_requests WHERE expires_at < ?",
+            (now,)
+        )
+        await self.db.conn.commit()
+        
+        async with self.db.conn.execute(
+            """
+            SELECT id, from_id, from_name, target_id, created_at, expires_at
+            FROM dual_cultivation_requests
+            WHERE target_id = ? AND expires_at > ?
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (target_id, now)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "from_id": row[1],
+                    "from_name": row[2],
+                    "target_id": row[3],
+                    "created_at": row[4],
+                    "expires_at": row[5]
+                }
+            return None
+    
+    async def _delete_request(self, request_id: int):
+        """删除双修请求"""
+        await self.db.conn.execute(
+            "DELETE FROM dual_cultivation_requests WHERE id = ?",
+            (request_id,)
+        )
+        await self.db.conn.commit()
     
     async def send_request(self, initiator: Player, target_id: str) -> Tuple[bool, str]:
         """发起双修请求"""
@@ -49,12 +113,12 @@ class DualCultivationManager:
             remaining = DUAL_CULT_COOLDOWN - (now - last_dual)
             return False, f"❌ 双修冷却中，还需 {remaining // 60} 分钟。"
         
-        # 发起请求
-        self.pending_requests[target_id] = {
-            "from_id": initiator.user_id,
-            "from_name": initiator.user_name or initiator.user_id[:8],
-            "time": now
-        }
+        # 发起请求（持久化到数据库）
+        await self._create_request(
+            initiator.user_id,
+            initiator.user_name or initiator.user_id[:8],
+            target_id
+        )
         
         return True, (
             f"💕 已向【{target.user_name or target_id[:8]}】发起双修请求！\n"
@@ -64,19 +128,13 @@ class DualCultivationManager:
     
     async def accept_request(self, acceptor: Player) -> Tuple[bool, str]:
         """接受双修请求"""
-        request = self.pending_requests.get(acceptor.user_id)
+        request = await self._get_pending_request(acceptor.user_id)
         if not request:
             return False, "❌ 没有待处理的双修请求。"
         
-        # 检查请求是否过期（5分钟）
-        now = int(time.time())
-        if now - request["time"] > 300:
-            del self.pending_requests[acceptor.user_id]
-            return False, "❌ 双修请求已过期。"
-        
         initiator = await self.db.get_player_by_id(request["from_id"])
         if not initiator:
-            del self.pending_requests[acceptor.user_id]
+            await self._delete_request(request["id"])
             return False, "❌ 请求发起者数据异常。"
         
         # 计算双修收益
@@ -90,11 +148,12 @@ class DualCultivationManager:
         await self.db.update_player(acceptor)
         
         # 记录冷却
+        now = int(time.time())
         await self._set_last_dual_time(initiator.user_id, now)
         await self._set_last_dual_time(acceptor.user_id, now)
         
         # 清除请求
-        del self.pending_requests[acceptor.user_id]
+        await self._delete_request(request["id"])
         
         return True, (
             f"💕 双修成功！\n"
@@ -108,12 +167,12 @@ class DualCultivationManager:
     
     async def reject_request(self, rejecter_id: str) -> Tuple[bool, str]:
         """拒绝双修请求"""
-        request = self.pending_requests.get(rejecter_id)
+        request = await self._get_pending_request(rejecter_id)
         if not request:
             return False, "❌ 没有待处理的双修请求。"
         
         from_name = request["from_name"]
-        del self.pending_requests[rejecter_id]
+        await self._delete_request(request["id"])
         
         return True, f"已拒绝【{from_name}】的双修请求。"
     

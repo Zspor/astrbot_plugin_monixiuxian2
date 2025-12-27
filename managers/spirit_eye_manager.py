@@ -88,14 +88,14 @@ class SpiritEyeManager:
         if eye["owner_id"]:
             return False, f"❌ 此灵眼已被【{eye['owner_name'] or '某人'}】占据。"
         
-        # 抢占
+        # 抢占（claim_time记录抢占时间，last_collect_time记录上次收取时间）
+        now = int(time.time())
         await self.db.conn.execute(
             """
-            UPDATE spirit_eyes SET owner_id = ?, owner_name = ?, claim_time = ?
+            UPDATE spirit_eyes SET owner_id = ?, owner_name = ?, claim_time = ?, last_collect_time = ?
             WHERE eye_id = ?
             """,
-            (player.user_id, player.user_name or player.user_id[:8], 
-             int(time.time()), eye_id)
+            (player.user_id, player.user_name or player.user_id[:8], now, now, eye_id)
         )
         await self.db.conn.commit()
         
@@ -111,7 +111,8 @@ class SpiritEyeManager:
         if not eye:
             return False, "❌ 你还没有占据灵眼。"
         
-        last_collect = eye.get("claim_time", 0)
+        # 使用last_collect_time计算收益，如果没有则使用claim_time
+        last_collect = eye.get("last_collect_time") or eye.get("claim_time", 0)
         now = int(time.time())
         hours_passed = (now - last_collect) / 3600
         
@@ -126,8 +127,9 @@ class SpiritEyeManager:
         player.experience += exp_income
         await self.db.update_player(player)
         
+        # 更新last_collect_time
         await self.db.conn.execute(
-            "UPDATE spirit_eyes SET claim_time = ? WHERE owner_id = ?",
+            "UPDATE spirit_eyes SET last_collect_time = ? WHERE owner_id = ?",
             (now, player.user_id)
         )
         await self.db.conn.commit()

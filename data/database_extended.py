@@ -373,28 +373,31 @@ class DatabaseExtended:
         await self.conn.execute(
             """
             UPDATE user_cd SET
-                type = ?, create_time = ?, scheduled_time = ?
+                type = ?, create_time = ?, scheduled_time = ?, extra_data = ?
             WHERE user_id = ?
             """,
-            (user_cd.type, user_cd.create_time, user_cd.scheduled_time, user_cd.user_id)
+            (user_cd.type, user_cd.create_time, user_cd.scheduled_time, user_cd.extra_data, user_cd.user_id)
         )
         await self.conn.commit()
     
-    async def set_user_busy(self, user_id: str, busy_type: int, scheduled_time: int = 0):
+    async def set_user_busy(self, user_id: str, busy_type: int, scheduled_time: int = 0, extra_data: dict = None):
         """设置用户忙碌状态
         
         Args:
             user_id: 用户ID
             busy_type: 0=空闲, 1=闭关, 2=历练, 3=探索秘境
             scheduled_time: 计划完成时间戳
+            extra_data: 额外数据（如秘境ID等）
         """
         import time
+        import json
+        extra_json = json.dumps(extra_data or {}, ensure_ascii=False)
         await self.conn.execute(
             """
-            UPDATE user_cd SET type = ?, create_time = ?, scheduled_time = ?
+            UPDATE user_cd SET type = ?, create_time = ?, scheduled_time = ?, extra_data = ?
             WHERE user_id = ?
             """,
-            (busy_type, int(time.time()), scheduled_time, user_id)
+            (busy_type, int(time.time()), scheduled_time, extra_json, user_id)
         )
         await self.conn.commit()
     

@@ -227,6 +227,8 @@ class XiuXianPlugin(Star):
         self.spirit_eye_handlers = SpiritEyeHandlers(self.db, self.spirit_eye_mgr)
         
         self.boss_task = None # Boss生成任务
+        self.loan_check_task = None # 贷款逾期检查任务
+        self.spirit_eye_task = None # 灵眼生成任务
 
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
@@ -278,12 +280,18 @@ class XiuXianPlugin(Star):
         
         # 启动定时任务
         self.boss_task = asyncio.create_task(self._schedule_boss_spawn())
+        self.loan_check_task = asyncio.create_task(self._schedule_loan_check())
+        self.spirit_eye_task = asyncio.create_task(self._schedule_spirit_eye_spawn())
         
         logger.info("【修仙插件】已加载。")
 
     async def terminate(self):
         if self.boss_task:
             self.boss_task.cancel()
+        if self.loan_check_task:
+            self.loan_check_task.cancel()
+        if self.spirit_eye_task:
+            self.spirit_eye_task.cancel()
         await self.db.close()
         logger.info("【修仙插件】已卸载。")
         
@@ -402,6 +410,130 @@ class XiuXianPlugin(Star):
                         logger.warning(f"【修仙插件】Boss击杀广播发送失败 (群{group_id}): {e}")
         except Exception as e:
             logger.error(f"【修仙插件】Boss击杀广播异常: {e}")
+
+    async def _schedule_loan_check(self):
+        """贷款逾期检查定时任务（每小时检查一次）"""
+        import time
+        
+        while True:
+            try:
+                # 每小时检查一次逾期贷款
+                await asyncio.sleep(3600)
+                
+                # 处理逾期贷款
+                processed = await self.bank_mgr.check_and_process_overdue_loans()
+                
+                if processed:
+                    logger.info(f"【修仙插件】处理了 {len(processed)} 笔逾期贷款")
+                    # 广播逾期玩家被追杀的消息
+                    for loan_info in processed:
+                        if loan_info.get("death"):
+                            await self._broadcast_loan_death(loan_info)
+                            
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"贷款检查任务异常: {e}")
+                await asyncio.sleep(60)
+
+    async def _broadcast_loan_death(self, loan_info: dict):
+        """广播贷款逾期玩家被追杀的消息"""
+        from astrbot.api.event import MessageChain
+        
+        if not self.whitelist_groups:
+            return
+        
+        player_name = loan_info.get("player_name", "某修士")
+        principal = loan_info.get("principal", 0)
+        
+        broadcast_msg = (
+            f"💀 银行追杀公告 💀\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"修士【{player_name}】因贷款逾期未还\n"
+            f"欠款：{principal:,} 灵石\n"
+            f"已被灵石银行追杀致死！\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"⚠️ 借贷有风险，还款需及时！"
+        )
+        
+        message_chain = MessageChain().message(broadcast_msg)
+        
+        try:
+            platforms = self.context.platform_manager.get_insts()
+            for platform in platforms:
+                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                for group_id in self.whitelist_groups:
+                    umo = f"{platform_name}:GroupMessage:{group_id}"
+                    try:
+                        await self.context.send_message(umo, message_chain)
+                    except Exception as e:
+                        logger.warning(f"【修仙插件】贷款追杀广播发送失败 (群{group_id}): {e}")
+        except Exception as e:
+            logger.error(f"【修仙插件】贷款追杀广播异常: {e}")
+
+    async def _schedule_spirit_eye_spawn(self):
+        """灵眼生成定时任务（每2小时生成一个）"""
+        import time
+        
+        while True:
+            try:
+                # 每2小时生成一个灵眼
+                spawn_interval = 7200
+                
+                # 检查是否有存储的下次刷新时间
+                next_spawn_str = await self.db.ext.get_system_config("spirit_eye_next_spawn_time")
+                current_time = int(time.time())
+                
+                if next_spawn_str:
+                    next_spawn_time = int(next_spawn_str)
+                    remaining = next_spawn_time - current_time
+                    if remaining > 0:
+                        logger.info(f"【修仙插件】灵眼将在 {remaining} 秒后刷新")
+                        await asyncio.sleep(remaining)
+                else:
+                    # 首次启动，等待完整间隔
+                    next_spawn_time = current_time + spawn_interval
+                    await self.db.ext.set_system_config("spirit_eye_next_spawn_time", str(next_spawn_time))
+                    await asyncio.sleep(spawn_interval)
+                
+                # 生成灵眼
+                success, msg = await self.spirit_eye_mgr.spawn_spirit_eye()
+                if success:
+                    logger.info(f"【修仙插件】{msg}")
+                    await self._broadcast_spirit_eye_spawn(msg)
+                
+                # 设置下次刷新时间
+                next_spawn_time = int(time.time()) + spawn_interval
+                await self.db.ext.set_system_config("spirit_eye_next_spawn_time", str(next_spawn_time))
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"灵眼生成任务异常: {e}")
+                await asyncio.sleep(60)
+
+    async def _broadcast_spirit_eye_spawn(self, msg: str):
+        """广播灵眼刷新消息"""
+        from astrbot.api.event import MessageChain
+        
+        if not self.whitelist_groups:
+            return
+        
+        broadcast_msg = f"👁️ {msg}\n💡 使用 /灵眼信息 查看详情"
+        message_chain = MessageChain().message(broadcast_msg)
+        
+        try:
+            platforms = self.context.platform_manager.get_insts()
+            for platform in platforms:
+                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                for group_id in self.whitelist_groups:
+                    umo = f"{platform_name}:GroupMessage:{group_id}"
+                    try:
+                        await self.context.send_message(umo, message_chain)
+                    except Exception as e:
+                        logger.warning(f"【修仙插件】灵眼广播发送失败 (群{group_id}): {e}")
+        except Exception as e:
+            logger.error(f"【修仙插件】灵眼广播异常: {e}")
 
     @filter.command(CMD_HELP, "显示帮助信息")
     @require_whitelist

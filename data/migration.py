@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 19  # v19: 银行系统表完整性修复
+LATEST_DB_VERSION = 20  # v20: 用户CD表添加额外数据字段
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -944,3 +944,47 @@ async def _migrate_to_v19(conn: aiosqlite.Connection, config_manager: ConfigMana
     
     await conn.commit()
     logger.info("v19迁移完成：银行系统表完整性修复")
+
+
+@migration(20)
+async def _migrate_to_v20(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v20 - 用户CD表添加额外数据字段"""
+    logger.info("开始迁移到v20：用户CD表添加额外数据字段")
+    
+    # 添加extra_data字段用于存储额外信息（如秘境ID、战斗冷却等）
+    try:
+        await conn.execute("ALTER TABLE user_cd ADD COLUMN extra_data TEXT NOT NULL DEFAULT '{}'")
+    except Exception as e:
+        logger.warning(f"添加extra_data字段失败（可能已存在）: {e}")
+    
+    # 添加last_collect_time字段到spirit_eyes表（修复灵眼收取时间计算）
+    try:
+        await conn.execute("ALTER TABLE spirit_eyes ADD COLUMN last_collect_time INTEGER")
+    except Exception as e:
+        logger.warning(f"添加last_collect_time字段失败（可能已存在）: {e}")
+    
+    # 添加双修请求持久化表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS dual_cultivation_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id TEXT NOT NULL,
+            from_name TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dual_req_target ON dual_cultivation_requests(target_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dual_req_expires ON dual_cultivation_requests(expires_at)")
+    
+    # 添加战斗冷却表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS combat_cooldowns (
+            user_id TEXT PRIMARY KEY,
+            last_duel_time INTEGER NOT NULL DEFAULT 0,
+            last_spar_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    
+    await conn.commit()
+    logger.info("v20迁移完成：用户CD表添加额外数据字段")
