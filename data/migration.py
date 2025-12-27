@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 18  # v18: 银行贷款与交易流水系统
+LATEST_DB_VERSION = 19  # v19: 银行系统表完整性修复
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -892,3 +892,55 @@ async def _migrate_to_v18(conn: aiosqlite.Connection, config_manager: ConfigMana
     
     await conn.commit()
     logger.info("v18迁移完成：银行贷款与交易流水系统")
+
+
+@migration(19)
+async def _migrate_to_v19(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v19 - 银行系统表完整性修复"""
+    logger.info("开始迁移到v19：银行系统表完整性修复")
+    
+    # 确保 bank_accounts 表存在（修复v14迁移可能跳过的情况）
+    logger.info("确保银行账户表存在...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_accounts (
+            user_id TEXT PRIMARY KEY,
+            balance INTEGER NOT NULL DEFAULT 0,
+            last_interest_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    
+    # 确保 bank_loans 表存在
+    logger.info("确保银行贷款表存在...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_loans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            principal INTEGER NOT NULL DEFAULT 0,
+            interest_rate REAL NOT NULL DEFAULT 0.005,
+            borrowed_at INTEGER NOT NULL,
+            due_at INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            loan_type TEXT NOT NULL DEFAULT 'normal'
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_user ON bank_loans(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_status ON bank_loans(status)")
+    
+    # 确保 bank_transactions 表存在
+    logger.info("确保银行交易流水表存在...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            trans_type TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_user ON bank_transactions(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_time ON bank_transactions(created_at)")
+    
+    await conn.commit()
+    logger.info("v19迁移完成：银行系统表完整性修复")
