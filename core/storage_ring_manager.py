@@ -85,7 +85,12 @@ class StorageRingManager:
         if not external_transaction:
             await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
-            player = await self.db.get_player_by_id(player.user_id)
+            fresh_player = await self.db.get_player_by_id(player.user_id)
+            if not fresh_player:
+                if not external_transaction:
+                    await self.db.conn.rollback()
+                return False, "玩家不存在或已被删除"
+            player = fresh_player
             items = player.get_storage_ring_items()
 
             if item_name not in items:
