@@ -4,7 +4,7 @@
   <img src="logo.png" alt="模拟修仙" width="200">
 </p>
 
-> **版本:** v2.9.9  
+> **版本:** v3.0.0  
 > **许可证:** AGPL-3.0  
 > **作者:** xiaojuwa  
 > **基于:** [nonebot_plugin_xiuxian_2](https://github.com/xiuxian-2/nonebot_plugin_xiuxian_2) (部分借鉴与重构)
@@ -99,6 +99,7 @@
 | `悬赏状态` | 查看任务进度 |
 | `完成悬赏` | 提交任务领取奖励 |
 | `放弃悬赏` | 放弃当前任务 |
+> 悬赏进度通过完成历练与秘境探索累计（一次历练视为一单位），任务类型会自动匹配 kill/gather/explore 需求。
 
 ### 🏛️ 宗门系统
 | 指令 | 说明 |
@@ -503,6 +504,14 @@ astrbot_plugin_monixiuxian2/
 | 悬赏过期处理 | bounty_manager.py | 完成时检查超时自动取消 |
 | 宗门名称验证 | sect_manager.py | 长度(2-12字)和敏感词检查 |
 | 传承buff应用 | combat_handlers.py | impart加成已应用到战斗 |
+
+---
+
+### v3.0.0 - 悬赏系统修复 & 新手友好
+
+- 悬赏模板仅生成可通过历练/秘境推进的任务类型，避免出现无法完成的“护送/收集”任务
+- 悬赏区新增说明，明确进度与历练/秘境挂钩
+- 包含 v2.9.9 的弃道重修功能及道具信息改进
 
 ---
 

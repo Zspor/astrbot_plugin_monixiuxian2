@@ -12,13 +12,13 @@ if TYPE_CHECKING:
 
 __all__ = ["BountyManager"]
 
-# 悬赏任务配置
+# 悬赏任务配置（type 必须在 add_bounty_progress 的白名单中）
 BOUNTY_TEMPLATES = [
     {"id": 1, "name": "击杀妖兽", "type": "kill", "min_count": 3, "max_count": 10, "base_reward": 500, "cooldown": 3600},
     {"id": 2, "name": "采集灵草", "type": "gather", "min_count": 5, "max_count": 15, "base_reward": 300, "cooldown": 1800},
-    {"id": 3, "name": "护送商队", "type": "escort", "min_count": 1, "max_count": 3, "base_reward": 800, "cooldown": 7200},
+    {"id": 3, "name": "护送商队", "type": "explore", "min_count": 1, "max_count": 3, "base_reward": 800, "cooldown": 7200},
     {"id": 4, "name": "探索遗迹", "type": "explore", "min_count": 2, "max_count": 5, "base_reward": 600, "cooldown": 5400},
-    {"id": 5, "name": "收集灵石", "type": "collect", "min_count": 1000, "max_count": 5000, "base_reward": 200, "cooldown": 900},
+    {"id": 5, "name": "收集灵石", "type": "gather", "min_count": 6, "max_count": 18, "base_reward": 200, "cooldown": 900},
 ]
 
 # 悬赏物品奖励表
