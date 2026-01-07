@@ -473,17 +473,17 @@ class ShopManager:
         details.append(f"品级: {item_data['rank']}")
         details.append(f"价格: {item_data['price']} 灵石")
 
-        # 添加描述
-        if 'description' in data:
-            details.append(f"描述: {data['description']}")
+        description = data.get('description')
+        if description:
+            details.append(f"描述: {description}")
 
-        # 添加属性信息
-            if item_type == 'weapon':
-                attrs = []
-                if data.get('magic_damage', 0) > 0:
-                    attrs.append(f"法伤+{data['magic_damage']}")
-                if data.get('physical_damage', 0) > 0:
-                    attrs.append(f"物伤+{data['physical_damage']}")
+        # 武器/防具/饰品属性
+        if item_type in ['weapon', 'armor', 'accessory']:
+            attrs = []
+            if data.get('magic_damage', 0) > 0:
+                attrs.append(f"法伤+{data['magic_damage']}")
+            if data.get('physical_damage', 0) > 0:
+                attrs.append(f"物伤+{data['physical_damage']}")
             if data.get('magic_defense', 0) > 0:
                 attrs.append(f"法防+{data['magic_defense']}")
             if data.get('physical_defense', 0) > 0:
@@ -496,8 +496,13 @@ class ShopManager:
                 level_name = self._format_required_level(data['required_level_index'])
                 details.append(f"需求境界: {level_name}")
 
-        elif item_type in ['armor', 'main_technique', 'technique']:
+        # 心法/功法
+        elif item_type in ['main_technique', 'technique']:
             attrs = []
+            if data.get('exp_multiplier', 0) > 0:
+                attrs.append(f"修炼效率+{data['exp_multiplier']:.1%}")
+            if data.get('spiritual_qi', 0) > 0:
+                attrs.append(f"灵气+{data['spiritual_qi']}")
             if data.get('magic_damage', 0) > 0:
                 attrs.append(f"法伤+{data['magic_damage']}")
             if data.get('physical_damage', 0) > 0:
@@ -508,17 +513,89 @@ class ShopManager:
                 attrs.append(f"物防+{data['physical_defense']}")
             if data.get('mental_power', 0) > 0:
                 attrs.append(f"精神力+{data['mental_power']}")
-            if item_type == 'main_technique':
-                if data.get('exp_multiplier', 0) > 0:
-                    attrs.append(f"修为倍率+{data['exp_multiplier']:.1%}")
-                if data.get('spiritual_qi', 0) > 0:
-                    attrs.append(f"灵气+{data['spiritual_qi']}")
             if attrs:
-                details.append(f"属性: {', '.join(attrs)}")
+                details.append(f"效果: {', '.join(attrs)}")
+            if 'required_level_index' in data:
+                level_name = self._format_required_level(data['required_level_index'])
+                details.append(f"需求境界: {level_name}")
 
-        elif item_type in ['pill', 'exp_pill', 'utility_pill']:
+        # 丹药类
+        elif item_type in ['pill', 'exp_pill', 'utility_pill', 'legacy_pill']:
             if 'required_level_index' in data and data['required_level_index'] > 0:
                 level_name = self._format_required_level(data['required_level_index'])
                 details.append(f"需求境界: {level_name}")
+
+            subtype = data.get('subtype', '')
+            effect_desc = []
+
+            if item_type == 'pill' and subtype == 'breakthrough':
+                bonus = data.get('breakthrough_bonus', 0)
+                max_rate = data.get('max_success_rate', 1.0)
+                target = data.get('target_level_index')
+                if target is not None:
+                    level_name = self._format_required_level(target)
+                    effect_desc.append(f"目标境界: {level_name}")
+                effect_desc.append(f"突破成功率+{int(bonus * 100)}%，最高可达 {int(max_rate * 100)}%")
+
+            elif item_type == 'exp_pill':
+                exp_gain = data.get('exp_gain', 0)
+                effect_desc.append(f"立即获得修为：+{exp_gain}")
+
+            elif item_type == 'utility_pill':
+                effect_type = data.get('effect_type', '')
+                if subtype == 'resurrection':
+                    effect_desc.append("死亡时自动复活（属性减半）")
+                elif effect_type == 'temporary':
+                    duration = data.get('duration_minutes', 0)
+                    mult = data.get('cultivation_multiplier', 0)
+                    if mult > 0:
+                        effect_desc.append(f"修炼速度+{int(mult * 100)}% 持续 {duration} 分钟")
+                    if data.get('physical_damage_multiplier'):
+                        effect_desc.append(f"物伤倍率+{data['physical_damage_multiplier']:.0%}")
+                elif effect_type == 'permanent':
+                    gains = []
+                    for attr_key, label in [
+                        ('physical_damage_gain', '物伤'),
+                        ('magic_damage_gain', '法伤'),
+                        ('physical_defense_gain', '物防'),
+                        ('magic_defense_gain', '法防'),
+                        ('mental_power_gain', '精神力')
+                    ]:
+                        value = data.get(attr_key)
+                        if value:
+                            sign = "+" if value > 0 else ""
+                            gains.append(f"{label}{sign}{value}")
+                    if gains:
+                        effect_desc.append("永久增益：" + "，".join(gains))
+                if data.get('resets_permanent_pills'):
+                    refund_ratio = data.get('reset_refund_ratio', 0)
+                    hint = "重置所有永久丹药增益"
+                    if refund_ratio:
+                        hint += f"，返还售价的{int(refund_ratio*100)}%"
+                    effect_desc.append(hint)
+                if data.get('blocks_next_debuff'):
+                    effect_desc.append("获得定魂护盾，抵消下一次负面状态")
+
+            elif item_type == 'legacy_pill':
+                effect_data = data.get('effect', {})
+                for key, label in [
+                    ('add_hp', '恢复气血'),
+                    ('add_experience', '增加修为'),
+                    ('add_max_hp', '提升上限'),
+                    ('add_attack', '物伤变化'),
+                    ('add_defense', '物防变化'),
+                    ('add_spiritual_power', '法伤变化'),
+                    ('add_mental_power', '精神力变化'),
+                    ('add_gold', '灵石变化'),
+                ]:
+                    value = effect_data.get(key)
+                    if value:
+                        sign = "+" if value > 0 else ""
+                        effect_desc.append(f"{label}{sign}{value}")
+                if effect_data.get('add_breakthrough_bonus'):
+                    effect_desc.append(f"突破成功率+{int(effect_data['add_breakthrough_bonus']*100)}%（1小时）")
+
+            if effect_desc:
+                details.append("效果: " + "；".join(effect_desc))
 
         return "\n".join(details)

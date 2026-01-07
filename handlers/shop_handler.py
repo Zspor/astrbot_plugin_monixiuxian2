@@ -14,6 +14,19 @@ __all__ = ["ShopHandler"]
 
 class ShopHandler:
     """商店处理器"""
+    
+    ITEM_ACQUIRE_HINTS = {
+        'pill': "丹阁刷新、秘境稀有掉落",
+        'exp_pill': "丹阁、炼丹系统、历练/秘境奖励",
+        'utility_pill': "丹阁稀有、秘境/Boss 掉落",
+        'legacy_pill': "百宝阁限量，购买后立即生效",
+        'weapon': "器阁、Boss 掉落",
+        'armor': "器阁、Boss 掉落",
+        'accessory': "器阁、Boss 掉落",
+        'main_technique': "百宝阁稀有刷新",
+        'technique': "百宝阁、Boss 掉落",
+        'material': "历练、秘境、悬赏、灵田收获与百宝阁限量",
+    }
 
     def __init__(self, db: DataBase, config: AstrBotConfig, config_manager: ConfigManager):
         self.db = db
@@ -212,6 +225,35 @@ class ShopHandler:
             await self.db.conn.rollback()
             logger.error(f"购买异常: {e}")
             raise
+
+    def _get_acquire_hint(self, item_type: str) -> str:
+        """根据类型返回获取提示"""
+        return self.ITEM_ACQUIRE_HINTS.get(item_type, "商店刷新或活动奖励")
+
+    async def handle_item_info(self, event: AstrMessageEvent, item_name: str = ""):
+        """查询物品/丹药的具体效果与获取方式"""
+        if not item_name or item_name.strip() == "":
+            yield event.plain_result(
+                "请指定要查询的物品名称\n"
+                "用法：物品信息 <名称>\n"
+                "示例：物品信息 筑基丹"
+            )
+            return
+
+        item = self.shop_manager.find_item_by_name(item_name.strip())
+        if not item:
+            yield event.plain_result(f"未找到物品【{item_name}】，请检查名称或等待刷新。")
+            return
+
+        detail_text = self.shop_manager.get_item_details(item)
+        acquire_hint = self._get_acquire_hint(item.get('type', ''))
+
+        lines = [
+            detail_text,
+            f"获取途径：{acquire_hint}",
+            "💡 使用 /丹阁、/器阁、/百宝阁 查看当前售卖物品"
+        ]
+        yield event.plain_result("\n".join(lines))
 
     async def _apply_legacy_pill_effects(self, player: Player, item: dict, quantity: int) -> tuple:
         """应用旧系统丹药效果（items.json中的丹药）

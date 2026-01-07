@@ -51,6 +51,7 @@ CMD_PILL_INFO = "丹药信息"
 CMD_PILL_PAVILION = "丹阁"
 CMD_WEAPON_PAVILION = "器阁"
 CMD_TREASURE_PAVILION = "百宝阁"
+CMD_ITEM_INFO = "物品信息"
 CMD_BUY = "购买"
 CMD_STORAGE_RING = "储物戒"
 CMD_STORE_ITEM = "存入"
@@ -678,6 +679,12 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_treasure_pavilion(self, event: AstrMessageEvent):
         async for r in self.shop_handler.handle_treasure_pavilion(event):
+            yield r
+
+    @filter.command(CMD_ITEM_INFO, "查看物品详细效果")
+    @require_whitelist
+    async def handle_item_info(self, event: AstrMessageEvent, item_name: str = ""):
+        async for r in self.shop_handler.handle_item_info(event, item_name):
             yield r
 
     @filter.command(CMD_BUY, "购买物品")
