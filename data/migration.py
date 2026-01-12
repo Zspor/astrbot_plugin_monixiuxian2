@@ -459,7 +459,8 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             user_id TEXT PRIMARY KEY,
             type INTEGER NOT NULL DEFAULT 0,
             create_time INTEGER NOT NULL DEFAULT 0,
-            scheduled_time INTEGER NOT NULL DEFAULT 0
+            scheduled_time INTEGER NOT NULL DEFAULT 0,
+            extra_data TEXT NOT NULL DEFAULT '{}'
         )
     """)
     
