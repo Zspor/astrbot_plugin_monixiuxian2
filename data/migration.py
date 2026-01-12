@@ -521,6 +521,58 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_user ON bank_transactions(user_id)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_time ON bank_transactions(created_at)")
 
+
+    # 添加洞天福地表（v16）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS blessed_lands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            land_type INTEGER NOT NULL DEFAULT 1,
+            land_name TEXT NOT NULL DEFAULT '小洞天',
+            level INTEGER NOT NULL DEFAULT 1,
+            exp_bonus REAL NOT NULL DEFAULT 0.05,
+            gold_per_hour INTEGER NOT NULL DEFAULT 100,
+            last_collect_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_blessed_lands_user ON blessed_lands(user_id)")
+
+    # 添加灵田表（v16）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS spirit_farms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            level INTEGER NOT NULL DEFAULT 1,
+            crops TEXT NOT NULL DEFAULT '[]'
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_farms_user ON spirit_farms(user_id)")
+
+    # 添加双修记录表（v16）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS dual_cultivation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            last_dual_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dual_user ON dual_cultivation(user_id)")
+
+    # 添加天地灵眼表（v16）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS spirit_eyes (
+            eye_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            eye_type INTEGER NOT NULL DEFAULT 1,
+            eye_name TEXT NOT NULL DEFAULT '下品灵眼',
+            exp_per_hour INTEGER NOT NULL DEFAULT 500,
+            spawn_time INTEGER NOT NULL,
+            owner_id TEXT,
+            owner_name TEXT,
+            claim_time INTEGER
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_eyes_owner ON spirit_eyes(owner_id)")
+
     logger.info("数据库表已创建完成（v2 - 完整修仙系统）")
 
 
