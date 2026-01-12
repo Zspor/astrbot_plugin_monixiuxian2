@@ -568,10 +568,51 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             spawn_time INTEGER NOT NULL,
             owner_id TEXT,
             owner_name TEXT,
-            claim_time INTEGER
+            claim_time INTEGER,
+            last_collect_time INTEGER
         )
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_eyes_owner ON spirit_eyes(owner_id)")
+ # 添加双修请求表（v20）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS dual_cultivation_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id TEXT NOT NULL,
+            from_name TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dual_req_target ON dual_cultivation_requests(target_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dual_req_expires ON dual_cultivation_requests(expires_at)")
+
+    # 添加战斗冷却表（v20）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS combat_cooldowns (
+            user_id TEXT PRIMARY KEY,
+            last_duel_time INTEGER NOT NULL DEFAULT 0,
+            last_spar_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    # 添加悬赏任务表（v14）
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bounty_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            bounty_id INTEGER NOT NULL,
+            bounty_name TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_count INTEGER NOT NULL,
+            current_progress INTEGER NOT NULL DEFAULT 0,
+            rewards TEXT NOT NULL DEFAULT '{}',
+            start_time INTEGER NOT NULL,
+            expire_time INTEGER NOT NULL,
+            status INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bounty_user ON bounty_tasks(user_id)")
 
     logger.info("数据库表已创建完成（v2 - 完整修仙系统）")
 
