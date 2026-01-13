@@ -105,8 +105,9 @@ class StorageRingManager:
 
             items[item_name] = items.get(item_name, 0) + count
             player.set_storage_ring_items(items)
-            await self.db.update_player(player)
+            # 当外部事务存在时，不直接更新数据库，而是让外部事务统一处理
             if not external_transaction:
+                await self.db.update_player(player)
                 await self.db.conn.commit()
 
             capacity = self.get_ring_capacity(player.storage_ring)
