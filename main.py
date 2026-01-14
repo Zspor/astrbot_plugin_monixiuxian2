@@ -74,6 +74,7 @@ CMD_SECT_DONATE = "宗门捐献"
 CMD_SECT_KICK = "踢出成员"
 CMD_SECT_TRANSFER = "宗主传位"
 CMD_SECT_TASK = "宗门任务"
+CMD_FINISH_SECT_TASK = "完成宗门任务"
 CMD_SECT_POSITION = "职位变更"
 
 # Boss系统指令
@@ -799,7 +800,13 @@ class XiuXianPlugin(Star):
     @filter.command(CMD_SECT_TASK, "执行宗门任务")
     @require_whitelist
     async def handle_sect_task(self, event: AstrMessageEvent):
-        async for r in self.sect_handlers.handle_sect_task(event):
+        async for r in self.sect_handler.handle_sect_task(event):
+            yield r
+
+    @filter.command(CMD_FINISH_SECT_TASK, "完成宗门任务（解决卡住的情况）")
+    @require_whitelist
+    async def handle_finish_sect_task(self, event: AstrMessageEvent):
+        async for r in self.sect_handler.handle_finish_sect_task(event):
             yield r
 
     @filter.command(CMD_SECT_LIST, "查看宗门列表")
