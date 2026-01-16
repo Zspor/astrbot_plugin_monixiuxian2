@@ -499,8 +499,7 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             borrowed_at INTEGER NOT NULL,
             due_at INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
-            loan_type TEXT NOT NULL DEFAULT 'normal',
-            UNIQUE(user_id, status)
+            loan_type TEXT NOT NULL DEFAULT 'normal'
         )
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_user ON bank_loans(user_id)")
@@ -961,8 +960,7 @@ async def _migrate_to_v18(conn: aiosqlite.Connection, config_manager: ConfigMana
             borrowed_at INTEGER NOT NULL,
             due_at INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
-            loan_type TEXT NOT NULL DEFAULT 'normal',
-            UNIQUE(user_id, status)
+            loan_type TEXT NOT NULL DEFAULT 'normal'
         )
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_user ON bank_loans(user_id)")
