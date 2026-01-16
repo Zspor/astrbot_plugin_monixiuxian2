@@ -177,6 +177,27 @@ ATK：{atk}
         if user_cd.type != UserStatus.IDLE:
             return False, "❌ 你当前正忙，无法挑战Boss！", None
         
+        # 4. 检查玩家血量，如果血量过低，需要冷却时间
+        if player.hp <= 1:
+            # 检查是否在冷却时间内（默认10分钟）
+            import json
+            cooldown_time = 10 * 60  # 10分钟冷却
+            
+            # 从extra_data中读取last_boss_defeat_time
+            try:
+                extra_data = json.loads(user_cd.extra_data) if user_cd.extra_data else {}
+                last_defeat_time = extra_data.get('last_boss_defeat_time', 0)
+                
+                if last_defeat_time:
+                    if int(time.time()) - last_defeat_time < cooldown_time:
+                        remaining_time = cooldown_time - (int(time.time()) - last_defeat_time)
+                        minutes = remaining_time // 60
+                        seconds = remaining_time % 60
+                        return False, f"❌ 你当前血量过低，需要休息一段时间才能再次挑战Boss！\n\n💡 剩余冷却时间：{minutes}分{seconds}秒", None
+            except Exception:
+                # 如果解析失败，忽略错误
+                pass
+        
         # 4. 计算玩家战斗属性
         # 获取buff加成
         impart_info = await self.db.ext.get_impart_info(user_id)
@@ -296,6 +317,19 @@ HP：{battle_result['player_final_hp']}/{player_stats.max_hp}
         player.hp = battle_result["player_final_hp"]
         player.mp = battle_result["player_final_mp"]
         await self.db.update_player(player)
+        
+        # 如果玩家失败（血量变成1），记录失败时间
+        if battle_result["winner"] != user_id and player.hp <= 1:
+            # 更新用户冷却时间记录到extra_data
+            import json
+            try:
+                extra_data = json.loads(user_cd.extra_data) if user_cd.extra_data else {}
+                extra_data['last_boss_defeat_time'] = int(time.time())
+                user_cd.extra_data = json.dumps(extra_data)
+                await self.db.ext.update_user_cd(user_cd)
+            except Exception:
+                # 如果更新失败，忽略错误
+                pass
         
         # 返回完整战斗日志
         combat_log = "\n".join(battle_result["combat_log"])
