@@ -312,7 +312,11 @@ HP：{battle_result['player_final_hp']}/{player_stats.max_hp}
         """
         boss = await self.db.ext.get_active_boss()
         if not boss:
-            return False, "❌ 当前没有Boss！", None
+            # 计算下一个Boss复活时间（默认2小时后）
+            next_spawn_time = int(time.time()) + 2 * 3600
+            # 格式化时间
+            next_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_spawn_time))
+            return False, f"❌ 当前没有Boss！\n\n💡 预计下一个Boss将在 {next_time_str} 复活", None
         
         hp_percent = (boss.hp / boss.max_hp) * 100
         
