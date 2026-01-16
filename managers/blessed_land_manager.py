@@ -37,8 +37,12 @@ class BlessedLandManager:
     
     async def purchase_blessed_land(self, player: Player, land_type: int) -> Tuple[bool, str]:
         """购买洞天"""
+        # 限制只能购买小洞天
+        if land_type != 1:
+            return False, "❌ 初始只能购买小洞天，通过进阶系统提升洞天品质。"
+        
         if land_type not in BLESSED_LANDS:
-            return False, "❌ 无效的洞天类型。可选：1-小洞天 2-中洞天 3-大洞天 4-福地 5-洞天福地"
+            return False, "❌ 无效的洞天类型。"
         
         # 检查是否已有洞天
         existing = await self.get_user_blessed_land(player.user_id)
@@ -73,7 +77,8 @@ class BlessedLandManager:
             f"修炼加成：+{land_config['exp_bonus']:.0%}\n"
             f"每小时产出：{land_config['gold_per_hour']} 灵石\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"使用 /洞天收取 领取产出"
+            f"使用 /洞天收取 领取产出\n"
+            f"💡 当小洞天达到5级时，可使用 /进阶洞天 2 提升到中洞天"
         )
     
     async def upgrade_blessed_land(self, player: Player) -> Tuple[bool, str]:
@@ -177,10 +182,15 @@ class BlessedLandManager:
         if target_type not in BLESSED_LANDS:
             return False, "❌ 无效的洞天类型。"
         
-        # 检查是否是更高类型
+        # 检查是否是下一级类型（只能层层进阶）
         current_type = existing["land_type"]
-        if target_type <= current_type:
-            return False, "❌ 目标洞天类型必须高于当前类型。"
+        if target_type != current_type + 1:
+            next_type = current_type + 1
+            if next_type in BLESSED_LANDS:
+                next_name = BLESSED_LANDS[next_type]["name"]
+                return False, f"❌ 只能层层进阶！当前只能进阶到{next_name}。"
+            else:
+                return False, "❌ 你的洞天已达最高等级，无法继续进阶。"
         
         # 检查现有洞天是否满级
         current_config = BLESSED_LANDS[current_type]
