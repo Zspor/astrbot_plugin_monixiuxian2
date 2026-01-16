@@ -166,6 +166,70 @@ class BlessedLandManager:
             f"当前灵石：{player.gold:,}"
         )
     
+    async def advance_blessed_land(self, player: Player, target_type: int) -> Tuple[bool, str]:
+        """进阶洞天"""
+        # 检查是否有洞天
+        existing = await self.get_user_blessed_land(player.user_id)
+        if not existing:
+            return False, "❌ 你还没有洞天！"
+        
+        # 检查目标类型是否有效
+        if target_type not in BLESSED_LANDS:
+            return False, "❌ 无效的洞天类型。"
+        
+        # 检查是否是更高类型
+        current_type = existing["land_type"]
+        if target_type <= current_type:
+            return False, "❌ 目标洞天类型必须高于当前类型。"
+        
+        # 检查现有洞天是否满级
+        current_config = BLESSED_LANDS[current_type]
+        if existing["level"] < current_config["max_level"]:
+            return False, f"❌ 你的{existing['land_name']}需要达到满级 {current_config['max_level']} 才能进阶。"
+        
+        # 计算进阶成本（新洞天价格 - 原洞天价格 × 补偿系数）
+        target_config = BLESSED_LANDS[target_type]
+        compensation = int(current_config["price"] * 0.7)  # 70% 补偿
+        advance_cost = target_config["price"] - compensation
+        
+        if player.gold < advance_cost:
+            return False, f"❌ 灵石不足！进阶需要 {advance_cost:,} 灵石。"
+        
+        # 扣除灵石
+        player.gold -= advance_cost
+        await self.db.update_player(player)
+        
+        # 计算新洞天初始等级（基于原等级）
+        # 例如：小洞天5级 → 中洞天3级（5 × 0.6）
+        initial_level = max(1, int(existing["level"] * 0.6))
+        
+        # 删除原洞天，创建新洞天
+        await self.db.conn.execute(
+            "DELETE FROM blessed_lands WHERE user_id = ?",
+            (player.user_id,)
+        )
+        await self.db.conn.execute(
+            """
+            INSERT INTO blessed_lands (user_id, land_type, land_name, level, exp_bonus, 
+                                       gold_per_hour, last_collect_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (player.user_id, target_type, target_config["name"], initial_level, 
+             target_config["exp_bonus"], target_config["gold_per_hour"], int(time.time()))
+        )
+        await self.db.conn.commit()
+        
+        return True, (
+            f"✨ 恭喜进阶到【{target_config['name']}】！\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"初始等级：Lv.{initial_level}\n"
+            f"修炼加成：+{target_config['exp_bonus']:.0%}\n"
+            f"每小时产出：{target_config['gold_per_hour']} 灵石\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"花费：{advance_cost:,} 灵石\n"
+            f"补偿：原洞天价值 {compensation:,} 灵石"
+        )
+    
     async def get_blessed_land_info(self, user_id: str) -> str:
         """获取洞天信息展示"""
         land = await self.get_user_blessed_land(user_id)
@@ -187,6 +251,11 @@ class BlessedLandManager:
         hours_since = (now - land["last_collect_time"]) / 3600
         pending_gold = int(min(24, hours_since) * land["gold_per_hour"])
         
+        # 检查是否可以进阶
+        current_config = BLESSED_LANDS[land["land_type"]]
+        can_advance = land["level"] >= current_config["max_level"] and land["land_type"] < 5
+        advance_hint = "\n💡 已达满级，可使用 /进阶洞天 <类型> 提升洞天品质" if can_advance else ""
+        
         return (
             f"🏔️ {land['land_name']} (Lv.{land['level']})\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -195,5 +264,5 @@ class BlessedLandManager:
             f"━━━━━━━━━━━━━━━\n"
             f"待收取：约 {pending_gold:,} 灵石\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💡 /升级洞天 | /洞天收取"
+            f"💡 /升级洞天 | /洞天收取{advance_hint}"
         )

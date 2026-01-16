@@ -142,6 +142,7 @@ CMD_BLESSED_LAND_INFO = "我的洞天"
 CMD_BLESSED_LAND_BUY = "购买洞天"
 CMD_BLESSED_LAND_UPGRADE = "升级洞天"
 CMD_BLESSED_LAND_COLLECT = "洞天收取"
+CMD_BLESSED_LAND_ADVANCE = "进阶洞天"
 
 # Phase 4: 灵田
 CMD_SPIRIT_FARM_INFO = "我的灵田"
@@ -1011,7 +1012,7 @@ class XiuXianPlugin(Star):
 
     @filter.command(CMD_ALCHEMY_CRAFT, "炼制丹药")
     @require_whitelist
-    async def handle_alchemy_craft(self, event: AstrMessageEvent, pill_id: int = 0):
+    async def handle_alchemy_craft(self, event: AstrMessageEvent, pill_id: str = ""):
         async for r in self.alchemy_handlers.handle_craft(event, pill_id):
             yield r
 
@@ -1145,6 +1146,12 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_blessed_land_collect(self, event: AstrMessageEvent):
         async for r in self.blessed_land_handlers.handle_collect(event):
+            yield r
+
+    @filter.command(CMD_BLESSED_LAND_ADVANCE, "进阶洞天")
+    @require_whitelist
+    async def handle_blessed_land_advance(self, event: AstrMessageEvent, target_type: int = 0):
+        async for r in self.blessed_land_handlers.handle_advance(event, target_type):
             yield r
 
     # ===== Phase 4: 灵田 =====

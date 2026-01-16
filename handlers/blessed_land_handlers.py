@@ -53,3 +53,23 @@ class BlessedLandHandlers:
         """收取洞天产出"""
         success, msg = await self.mgr.collect_income(player)
         yield event.plain_result(msg)
+    
+    @player_required
+    async def handle_advance(self, player: Player, event: AstrMessageEvent, target_type: int = 0):
+        """进阶洞天"""
+        if target_type <= 0:
+            yield event.plain_result(
+                "🏔️ 进阶洞天\n"
+                "━━━━━━━━━━━━━━━\n"
+                "请指定目标洞天类型：\n"
+                "2. 中洞天 (从小洞天进阶)\n"
+                "3. 大洞天 (从中洞天进阶)\n"
+                "4. 福地 (从大洞天进阶)\n"
+                "5. 洞天福地 (从福地进阶)\n"
+                "━━━━━━━━━━━━━━━\n"
+                "💡 使用 /进阶洞天 <编号>"
+            )
+            return
+        
+        success, msg = await self.mgr.advance_blessed_land(player, target_type)
+        yield event.plain_result(msg)
