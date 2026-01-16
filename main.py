@@ -849,9 +849,15 @@ class XiuXianPlugin(Star):
     # ===== Boss系统指令 =====
 
     @filter.command(CMD_BOSS_INFO, "查看世界Boss状态")
-    @filter.command("世界boss", "查看世界Boss状态")
     @require_whitelist
     async def handle_boss_info(self, event: AstrMessageEvent):
+        async for r in self.boss_handlers.handle_boss_info(event):
+            yield r
+    
+    @filter.command("世界boss", "查看世界Boss状态")
+    @require_whitelist
+    async def handle_boss_info_lower(self, event: AstrMessageEvent):
+        # 调用相同的处理逻辑
         async for r in self.boss_handlers.handle_boss_info(event):
             yield r
 
