@@ -206,20 +206,13 @@ ATK：{atk}
         atk_buff = impart_info.impart_atk_per if impart_info else 0.0
         crit_rate_buff = impart_info.impart_know_per if impart_info else 0.0
         
-        # 计算HP/MP/ATK
-        if player.hp == 0 or player.mp == 0:
-            # 如果没有初始化战斗属性，先计算
-            hp, mp = self.combat_mgr.calculate_hp_mp(player.experience, hp_buff, mp_buff)
-            atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice, atk_buff)
-            player.hp = hp
-            player.mp = mp
-            player.atk = atk
-            await self.db.update_player(player)
-        else:
-            # 使用现有属性
-            hp = player.hp
-            mp = player.mp
-            atk = player.atk
+        # 挑战boss前，hp和mp都恢复到最大值
+        hp, mp = self.combat_mgr.calculate_hp_mp(player.experience, hp_buff, mp_buff)
+        atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice, atk_buff)
+        player.hp = hp
+        player.mp = mp
+        player.atk = atk
+        await self.db.update_player(player)
         
         # 创建玩家战斗属性
         player_stats = CombatStats(
