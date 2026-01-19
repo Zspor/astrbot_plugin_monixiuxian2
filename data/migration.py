@@ -613,7 +613,27 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_bounty_user ON bounty_tasks(user_id)")
 
-    logger.info("数据库表已创建完成（v2 - 完整修仙系统）")
+    # 插入初始秘境数据
+    import json
+    import time
+    default_rifts = [
+        (1, "青云秘境", 1, 0, json.dumps({"exp": [500, 1500], "gold": [200, 800]})),
+        (2, "落日峡谷", 2, 3, json.dumps({"exp": [1500, 4000], "gold": [500, 2000]})),
+        (3, "万妖洞", 3, 6, json.dumps({"exp": [3000, 8000], "gold": [1000, 5000]})),
+        (4, "玄冰地宫", 4, 10, json.dumps({"exp": [5000, 15000], "gold": [2000, 10000]})),
+        (5, "上古遗迹", 5, 15, json.dumps({"exp": [10000, 30000], "gold": [5000, 20000]})),
+    ]
+    
+    for rift in default_rifts:
+        try:
+            await conn.execute(
+                "INSERT OR IGNORE INTO rifts (rift_id, rift_name, rift_level, required_level, rewards) VALUES (?, ?, ?, ?, ?)",
+                rift
+            )
+        except Exception as e:
+            logger.error(f"插入秘境数据失败: {str(e)}")
+    
+    logger.info("数据库表已创建完成（v2 - 完整修仙系统），并插入了5个默认秘境")
 
 
 @migration(12)
