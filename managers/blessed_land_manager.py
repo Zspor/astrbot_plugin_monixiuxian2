@@ -11,10 +11,10 @@ __all__ = ["BlessedLandManager"]
 # 洞天配置
 BLESSED_LANDS = {
     1: {"name": "小洞天", "price": 10000, "exp_bonus": 0.05, "gold_per_hour": 100, "max_level": 5, "max_exp_per_hour": 5000},
-    2: {"name": "中洞天", "price": 50000, "exp_bonus": 0.10, "gold_per_hour": 500, "max_level": 10, "max_exp_per_hour": 15000},
-    3: {"name": "大洞天", "price": 200000, "exp_bonus": 0.20, "gold_per_hour": 2000, "max_level": 15, "max_exp_per_hour": 30000},
-    4: {"name": "福地", "price": 500000, "exp_bonus": 0.30, "gold_per_hour": 5000, "max_level": 20, "max_exp_per_hour": 50000},
-    5: {"name": "洞天福地", "price": 1000000, "exp_bonus": 0.50, "gold_per_hour": 10000, "max_level": 30, "max_exp_per_hour": 100000},
+    2: {"name": "中洞天", "price": 30000, "exp_bonus": 0.10, "gold_per_hour": 500, "max_level": 10, "max_exp_per_hour": 15000},
+    3: {"name": "大洞天", "price": 80000, "exp_bonus": 0.20, "gold_per_hour": 2000, "max_level": 15, "max_exp_per_hour": 30000},
+    4: {"name": "福地", "price": 200000, "exp_bonus": 0.30, "gold_per_hour": 5000, "max_level": 20, "max_exp_per_hour": 50000},
+    5: {"name": "洞天福地", "price": 500000, "exp_bonus": 0.50, "gold_per_hour": 10000, "max_level": 30, "max_exp_per_hour": 100000},
 }
 
 
@@ -94,8 +94,16 @@ class BlessedLandManager:
         if current_level >= config["max_level"]:
             return False, f"❌ 你的{land['land_name']}已达最高等级 {config['max_level']}！"
         
-        # 升级费用：基础价格 × 当前等级 × 0.5
-        upgrade_cost = int(config["price"] * current_level * 0.5)
+        # 升级费用：使用固定每级费用，更线性增长
+        # 小洞天：每级 1000，中洞天：每级 2000，大洞天：每级 3000，福地：每级 4000，洞天福地：每级 3000
+        level_cost_map = {
+            1: 1000,  # 小洞天
+            2: 2000,  # 中洞天
+            3: 3000,  # 大洞天
+            4: 5000,  # 福地
+            5: 10000   # 洞天福地
+        }
+        upgrade_cost = level_cost_map.get(land_type, 1000)
         
         if player.gold < upgrade_cost:
             return False, f"❌ 灵石不足！升级需要 {upgrade_cost:,} 灵石。"
@@ -197,10 +205,9 @@ class BlessedLandManager:
         if existing["level"] < current_config["max_level"]:
             return False, f"❌ 你的{existing['land_name']}需要达到满级 {current_config['max_level']} 才能进阶。"
         
-        # 计算进阶成本（新洞天价格 - 原洞天价格 × 补偿系数）
+        # 计算进阶成本（新洞天价格 × 0.3）
         target_config = BLESSED_LANDS[target_type]
-        compensation = int(current_config["price"] * 0.7)  # 70% 补偿
-        advance_cost = target_config["price"] - compensation
+        advance_cost = int(target_config["price"])
         
         if player.gold < advance_cost:
             return False, f"❌ 灵石不足！进阶需要 {advance_cost:,} 灵石。"
@@ -209,9 +216,8 @@ class BlessedLandManager:
         player.gold -= advance_cost
         await self.db.update_player(player)
         
-        # 计算新洞天初始等级（基于原等级）
-        # 例如：小洞天5级 → 中洞天3级（5 × 0.6）
-        initial_level = max(1, int(existing["level"] * 0.6))
+        # 取消等级保留，每次进阶后从1级开始
+        initial_level = 1
         
         # 删除原洞天，创建新洞天
         await self.db.conn.execute(
