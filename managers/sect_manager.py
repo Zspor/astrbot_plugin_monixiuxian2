@@ -498,25 +498,10 @@ class SectManager:
         elif user_cd.type == UserStatus.SECT_TASK:
             await self.db.ext.set_user_free(user_id)
 
-        # 执行任务
-        contribution_gain = random.randint(10, 30)
-        stone_gain = contribution_gain * 10
-        
-        player.sect_contribution += contribution_gain
-        await self.db.update_player(player)
-        
-        # 宗门增加资源
-        await self.db.ext.donate_to_sect(player.sect_id, 0) # 只更新建设度? donate_to_sect update both.
-        # 手动更新宗门资源
-        sect = await self.db.ext.get_sect_by_id(player.sect_id)
-        if sect:
-            sect.sect_materials += stone_gain
-            await self.db.ext.update_sect(sect)
-
-        # 设置1小时冷却
+        # 设置1小时冷却，开始任务
         await self.db.ext.set_user_busy(user_id, UserStatus.SECT_TASK, current_time + 3600)
         
-        return True, f"✨ 完成宗门任务！\n获得贡献：{contribution_gain}\n宗门资材：+{stone_gain}"
+        return True, "✨ 你开始执行宗门任务！任务需要1小时完成，请在完成后使用 /完成宗门任务 领取奖励。"
 
     async def finish_sect_task(self, user_id: str) -> Tuple[bool, str]:
         """完成宗门任务（解决卡住的情况）"""
@@ -537,9 +522,22 @@ class SectManager:
                 minutes = remaining // 60
                 seconds = remaining % 60
                 return False, f"❌ 宗门任务尚未完成！还需 {minutes}分{seconds}秒。"
-            # 任务已完成或scheduled_time无效，重置状态
+            # 任务已完成，计算并发放奖励
+            contribution_gain = random.randint(10, 30)
+            stone_gain = contribution_gain * 10
+            
+            player.sect_contribution += contribution_gain
+            await self.db.update_player(player)
+            
+            # 宗门增加资源
+            sect = await self.db.ext.get_sect_by_id(player.sect_id)
+            if sect:
+                sect.sect_materials += stone_gain
+                await self.db.ext.update_sect(sect)
+            
+            # 重置状态
             await self.db.ext.set_user_free(user_id)
-            return True, "✅ 宗门任务已完成！你的状态已恢复正常。"
+            return True, f"✨ 宗门任务完成！\n获得贡献：{contribution_gain}\n宗门资材：+{stone_gain}"
         else:
             # 状态异常，重置状态
             await self.db.ext.set_user_free(user_id)
