@@ -242,8 +242,7 @@ class BlessedLandManager:
             f"修炼加成：+{target_config['exp_bonus']:.0%}\n"
             f"每小时产出：{target_config['gold_per_hour']} 灵石\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"花费：{advance_cost:,} 灵石\n"
-            f"补偿：原洞天价值 {compensation:,} 灵石"
+            f"花费：{advance_cost:,} 灵石"
         )
     
     async def get_blessed_land_info(self, user_id: str) -> str:

@@ -211,8 +211,8 @@ ATK：{atk}
         try:
             # 计算最大HP和MP
             hp, mp = self.combat_mgr.calculate_hp_mp(player.experience, hp_buff, mp_buff)
-            # 计算攻击力
-            atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice, atk_buff)
+            # 计算攻击力，包含物伤和法伤加成
+            atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice, atk_buff, player.physical_damage, player.magic_damage)
             # 更新玩家属性
             player.hp = hp
             player.mp = mp
