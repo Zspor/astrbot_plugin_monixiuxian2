@@ -54,7 +54,6 @@ CMD_TREASURE_PAVILION = "百宝阁"
 CMD_ITEM_INFO = "物品信息"
 CMD_BUY = "购买"
 CMD_STORAGE_RING = "储物戒"
-CMD_STORE_ITEM = "存入"
 CMD_RETRIEVE_ITEM = "取出"
 CMD_UPGRADE_RING = "更换储物戒"
 CMD_DISCARD_ITEM = "丢弃"
@@ -712,11 +711,6 @@ class XiuXianPlugin(Star):
         async for r in self.storage_ring_handler.handle_storage_ring(event):
             yield r
 
-    @filter.command(CMD_STORE_ITEM, "存入物品到储物戒")
-    @require_whitelist
-    async def handle_store_item(self, event: AstrMessageEvent, args: str = ""):
-        async for r in self.storage_ring_handler.handle_store_item(event, args):
-            yield r
 
     @filter.command(CMD_RETRIEVE_ITEM, "从储物戒取出物品")
     @require_whitelist
