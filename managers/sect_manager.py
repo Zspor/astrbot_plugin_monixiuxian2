@@ -190,11 +190,13 @@ class SectManager:
         sect_name = sect.sect_name if sect else "未知宗门"
         
         # 清除宗门信息
-        await self.db.ext.update_player_sect_info(user_id, 0, 4)
+        await self.db.ext.update_player_sect_info(user_id, 0, 0)
+        player.sect_id = 0
+        player.sect_position = 0
         player.sect_contribution = 0
         await self.db.update_player(player)
         
-        return True, f"✨ 你已退出宗门『{sect_name}』！"
+        return True, f"✨ 你已退出宗门『{sect_name}』！贡献度已清零。"
     
     async def donate_to_sect(
         self,
