@@ -66,6 +66,11 @@ class PillManager:
         if pill:
             return pill
 
+        # 尝试从items.json中查找
+        for item in self.config_manager.items_data.values():
+            if item.get("name") == pill_name and item.get("type") == "丹药":
+                return item
+
         return None
 
     async def update_temporary_effects(self, player: Player):
@@ -133,6 +138,10 @@ class PillManager:
         # 根据丹药类型处理
         effect_type = pill_data.get("effect_type", "instant")
         subtype = pill_data.get("subtype", "")
+
+        # 禁止服用破境丹
+        if subtype == "breakthrough":
+            return False, f"【{pill_name}】是破境丹，只能在突破时使用！"
 
         if subtype == "exp":
             # 修为丹
@@ -643,6 +652,8 @@ class PillManager:
         temp_bonus = 0.0
         has_temp_effects = False
 
+        # 按丹药类型分组计算加成，同类型只取最高值
+        bonus_groups = {}
         for effect in effects:
             expiry_time = effect.get("expiry_time", 0)
             if expiry_time > 0 and current_time >= expiry_time:
@@ -650,8 +661,29 @@ class PillManager:
 
             subtype = effect.get("subtype", "")
             if subtype in {"breakthrough_boost", "breakthrough_debuff"}:
-                temp_bonus += effect.get("breakthrough_bonus", 0)
-                has_temp_effects = True
+                pill_name = effect.get("pill_name", "")
+                # 根据丹药名称判断类型
+                if "凝神增益丹" in pill_name:
+                    group = "zengyi"
+                elif "破境增益丹" in pill_name:
+                    group = "zengyi"
+                elif "渡劫增益丹" in pill_name:
+                    group = "zengyi"
+                elif "化神增益丹" in pill_name:
+                    group = "zengyi"
+                else:
+                    group = "other"
+                
+                # 同类型只保留最高加成
+                current_bonus = effect.get("breakthrough_bonus", 0)
+                if group not in bonus_groups or current_bonus > bonus_groups[group]:
+                    bonus_groups[group] = current_bonus
+
+        # 累加不同类型的加成
+        temp_bonus = sum(bonus_groups.values())
+        has_temp_effects = len(bonus_groups) > 0
+        # 限制总加成不超过50%
+        temp_bonus = min(temp_bonus, 0.5)
 
         permanent_multiplier = 1.0
         permanent_gains = player.get_permanent_pill_gains()
